@@ -72,13 +72,17 @@ def _handle_tools_list() -> dict:
             },
             {
                 "name": "first_email_draft",
-                "description": "Read first email from inbox, send to Oshaani for draft reply, create Gmail draft",
+                "description": "Read email from inbox, send to Oshaani for draft reply, create Gmail draft. Use subject to target a specific email.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
                         "request": {
                             "type": "string",
                             "description": "Custom prompt for the AI (optional)",
+                        },
+                        "subject": {
+                            "type": "string",
+                            "description": "Match email by subject (partial match). If omitted, uses first email.",
                         },
                     },
                 },
@@ -103,7 +107,7 @@ def _handle_tools_list() -> dict:
             },
             {
                 "name": "chat_auto_reply",
-                "description": "Auto-reply to latest Chat message using Oshaani agent",
+                "description": "Auto-reply to latest Chat message (one-to-one DMs only). Does not reply if last message is yours.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -173,12 +177,13 @@ def _handle_tools_call(name: str, arguments: dict) -> dict:
 
     if name == "smart_inbox":
         req = (arguments or {}).get("request") or "Summarize my inbox and highlight urgent items. Suggest draft replies for the top 3 emails."
-        result = orchestrator.run_smart_inbox(creds, user_request=req)
+        result = orchestrator.run_smart_inbox(creds, user_request=req, user_id=user_id)
         return {"content": [{"type": "text", "text": str(result.get("response", result))}]}
 
     elif name == "first_email_draft":
         req = (arguments or {}).get("request")
-        result = orchestrator.run_first_email_draft(creds, user_request=req)
+        subj = (arguments or {}).get("subject")
+        result = orchestrator.run_first_email_draft(creds, user_request=req, subject_filter=subj, user_id=user_id)
         return {"content": [{"type": "text", "text": json.dumps(result, indent=2)}]}
 
     elif name == "chat_spaces":
@@ -187,14 +192,16 @@ def _handle_tools_call(name: str, arguments: dict) -> dict:
 
     elif name == "document_intelligence":
         req = (arguments or {}).get("request") or "What are the key documents in my Drive? Summarize recent activity."
-        result = orchestrator.run_document_intelligence(creds, user_request=req)
+        result = orchestrator.run_document_intelligence(creds, user_request=req, user_id=user_id)
         return {"content": [{"type": "text", "text": str(result.get("response", result))}]}
 
     elif name == "chat_auto_reply":
         space_name = (arguments or {}).get("space_name")
         if not space_name:
             return {"content": [{"type": "text", "text": "Error: space_name is required"}]}
-        result = orchestrator.run_chat_auto_reply(creds, space_name, reply_to_latest=1)
+        from services.google_data import get_space_type
+        space_type = get_space_type(creds, space_name)
+        result = orchestrator.run_chat_auto_reply(creds, space_name, user_id=user_id, reply_to_latest=1, space_type=space_type)
         return {"content": [{"type": "text", "text": json.dumps(result, indent=2)}]}
 
     elif name == "run_all_workflows":

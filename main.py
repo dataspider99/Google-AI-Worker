@@ -26,6 +26,7 @@ from auth.google_oauth import (
 )
 from config import (
     APP_BASE_URL,
+    AUTOMATION_CHAT_AUTO_REPLY_ENABLED,
     AUTOMATION_ENABLED,
     AUTOMATION_INTERVAL_MINUTES,
     SECRET_KEY,
@@ -64,6 +65,7 @@ def _run_automation_for_all_users():
     """Run all workflows for every user with credentials."""
     if not AUTOMATION_ENABLED:
         return
+    include_chat = AUTOMATION_CHAT_AUTO_REPLY_ENABLED
     users = list_users()
     if not users:
         return
@@ -77,7 +79,7 @@ def _run_automation_for_all_users():
             from services.automation import run_all_workflows_for_user
 
             creds_obj = dict_to_credentials(cred_data)
-            run_all_workflows_for_user(user_id, creds_obj)
+            run_all_workflows_for_user(user_id, creds_obj, include_chat_auto_reply=include_chat)
             logger.info("Automation completed for %s", user_id)
         except Exception as e:
             logger.warning("Automation failed for %s: %s", user_id, e)
@@ -176,6 +178,7 @@ def get_me(user_id: Annotated[str, Depends(get_current_user)]):
         "authenticated": True,
         "automation": "Active" if AUTOMATION_ENABLED else "Disabled",
         "automation_interval_minutes": AUTOMATION_INTERVAL_MINUTES,
+        "chat_auto_reply": "Active" if AUTOMATION_CHAT_AUTO_REPLY_ENABLED else "Disabled",
         "api_key": "POST /api-key to generate (for scripts/cron)",
         "drive_data": "GET /me/drive-data to fetch your stored data from Drive",
     }
@@ -225,7 +228,7 @@ def workflow_smart_inbox(
     creds = _get_user_creds(user_id)
     orchestrator = WorkflowOrchestrator()
     user_request = request or "Summarize my inbox and highlight urgent items. Suggest draft replies for the top 3 emails."
-    return orchestrator.run_smart_inbox(creds, user_request=user_request, create_tasks=create_tasks)
+    return orchestrator.run_smart_inbox(creds, user_request=user_request, create_tasks=create_tasks, user_id=user_id)
 
 
 @app.post("/workflows/chat-assistant")
@@ -238,25 +241,29 @@ def workflow_chat_assistant(
     logger.info("Chat assistant workflow for %s", user_id)
     creds = _get_user_creds(user_id)
     orchestrator = WorkflowOrchestrator()
-    return orchestrator.run_chat_assistant(creds, request, space_name=space_name)
+    return orchestrator.run_chat_assistant(creds, request, space_name=space_name, user_id=user_id)
 
 
 @app.post("/workflows/chat-auto-reply")
 def workflow_chat_auto_reply(
     user_id: Annotated[str, Depends(get_current_user)],
-    space_name: str = Query(..., description="Chat space name (e.g. spaces/xxx)"),
+    space_name: str = Query(..., description="Chat space name (e.g. spaces/xxx). Only one-to-one DMs supported."),
     reply_to_latest: int = Query(1, ge=1, le=5, description="Number of latest messages to reply to"),
     prompt: Optional[str] = Query(None, description="Custom system prompt for the agent"),
 ):
     """
-    Auto-reply to Google Chat: fetch latest messages, send to Oshaani agent, post replies.
-    Use GET /workflows/chat-spaces to list your spaces.
+    Auto-reply to Google Chat (one-to-one DMs only). Does not reply if last message is yours.
+    Use GET /workflows/chat-spaces to list your spaces (filter by type=DIRECT_MESSAGE).
     """
     logger.info("Chat auto-reply workflow for %s, space %s", user_id, space_name)
+    from services.google_data import get_space_type
+
     creds = _get_user_creds(user_id)
+    space_type = get_space_type(creds, space_name)
     orchestrator = WorkflowOrchestrator()
     return orchestrator.run_chat_auto_reply(
-        creds, space_name, reply_to_latest=reply_to_latest, system_prompt=prompt
+        creds, space_name, user_id=user_id, reply_to_latest=reply_to_latest,
+        system_prompt=prompt, space_type=space_type
     )
 
 
@@ -287,7 +294,7 @@ def workflow_document_intelligence(
     creds = _get_user_creds(user_id)
     orchestrator = WorkflowOrchestrator()
     user_request = request or "What are the key documents in my Drive? Summarize recent activity."
-    return orchestrator.run_document_intelligence(creds, user_request=user_request)
+    return orchestrator.run_document_intelligence(creds, user_request=user_request, user_id=user_id)
 
 
 @app.post("/workflows/first-email-draft")
@@ -297,15 +304,21 @@ def workflow_first_email_draft(
         None,
         description="Custom prompt for the AI (e.g. tone, length). Default: draft a professional reply.",
     ),
+    subject: Optional[str] = Query(
+        None,
+        description="Match email by subject (partial match). If omitted, uses first email in inbox.",
+    ),
 ):
     """
-    Read the first email from inbox, send to Oshaani for draft reply, create Gmail draft.
-    The draft appears in Gmail Drafts for you to review and send.
+    Read email from inbox, send to Oshaani for draft reply, create Gmail draft.
+    Use subject param to target a specific email. The draft appears in Gmail Drafts.
     """
-    logger.info("First email draft workflow for %s", user_id)
+    logger.info("First email draft workflow for %s (subject=%s)", user_id, subject)
     creds = _get_user_creds(user_id)
     orchestrator = WorkflowOrchestrator()
-    return orchestrator.run_first_email_draft(creds, user_request=request)
+    return orchestrator.run_first_email_draft(
+        creds, user_request=request, subject_filter=subject, user_id=user_id
+    )
 
 
 @app.post("/workflows/custom")
@@ -326,6 +339,7 @@ def workflow_custom(
         include_emails=include_emails,
         include_chat=include_chat,
         include_drive=include_drive,
+        user_id=user_id,
     )
 
 

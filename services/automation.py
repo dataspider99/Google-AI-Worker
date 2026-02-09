@@ -18,7 +18,7 @@ def run_all_workflows_for_user(
     include_smart_inbox: bool = True,
     include_document_intelligence: bool = True,
     include_chat_auto_reply: bool = True,
-    chat_spaces_limit: int = 3,
+    chat_spaces_limit: int = 10,
 ) -> dict[str, Any]:
     """
     Run all enabled workflows for a user. Returns aggregated results.
@@ -32,6 +32,7 @@ def run_all_workflows_for_user(
             r = orchestrator.run_smart_inbox(
                 creds,
                 user_request="Summarize my inbox and highlight urgent items. Suggest draft replies for the top 3 emails.",
+                user_id=user_id,
             )
             smart_result = {"status": "ok", "response_preview": str(r.get("response", ""))[:200]}
             if r.get("tasks_created"):
@@ -48,6 +49,7 @@ def run_all_workflows_for_user(
             r = orchestrator.run_document_intelligence(
                 creds,
                 user_request="What are the key documents in my Drive? Summarize recent activity.",
+                user_id=user_id,
             )
             results["workflows"]["document_intelligence"] = {"status": "ok", "response_preview": str(r.get("response", ""))[:200]}
         except Exception as e:
@@ -55,14 +57,18 @@ def run_all_workflows_for_user(
             results["workflows"]["document_intelligence"] = {"status": "error", "error": str(e)}
             results["errors"].append(f"document_intelligence: {e}")
 
-    # 3. Chat Auto-Reply (for each space)
+    # 3. Chat Auto-Reply (one-to-one DMs only)
     if include_chat_auto_reply:
         try:
-            spaces = fetch_chat_spaces(creds)
+            all_spaces = fetch_chat_spaces(creds)
+            spaces = [s for s in all_spaces if s.get("type") == "DIRECT_MESSAGE"]
+            logger.info("Chat auto-reply: %d DM spaces (of %d total)", len(spaces), len(all_spaces))
             chat_results = []
             for space in spaces[:chat_spaces_limit]:
                 try:
-                    r = orchestrator.run_chat_auto_reply(creds, space["name"], reply_to_latest=1)
+                    r = orchestrator.run_chat_auto_reply(
+                        creds, space["name"], user_id=user_id, reply_to_latest=1, space_type=space.get("type")
+                    )
                     chat_results.append({"space": space.get("displayName", space["name"]), "replies": r.get("replies", [])})
                 except Exception as e:
                     logger.warning("Chat auto-reply failed for space %s: %s", space.get("name"), e)

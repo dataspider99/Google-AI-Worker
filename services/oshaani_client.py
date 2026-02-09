@@ -1,11 +1,33 @@
 """Oshaani.com AI Agent API client."""
 from __future__ import annotations
 
+import re
 from typing import Any, Optional
 
 import httpx
 
 from config import OSHAANI_AGENT_API_KEY, OSHAANI_API_BASE_URL
+
+_REASONING_RE = re.compile(
+    r"<reasoning>[\s\S]*?</reasoning>|<reasoning>[\s\S]*?</resoning>",
+    re.IGNORECASE,
+)
+
+
+def _strip_reasoning(text: str) -> str:
+    """Remove <reasoning>...</reasoning> blocks from AI response text."""
+    if not isinstance(text, str):
+        return text
+    return _REASONING_RE.sub("", text).strip()
+
+
+def _normalize_response(data: dict[str, Any]) -> dict[str, Any]:
+    """Strip reasoning tags from response/message/text fields."""
+    result = dict(data)
+    for key in ("response", "message", "text", "content"):
+        if key in result and isinstance(result[key], str):
+            result[key] = _strip_reasoning(result[key])
+    return result
 
 
 class OshaaniClient:
@@ -42,7 +64,7 @@ class OshaaniClient:
                 timeout=60.0,
             )
             resp.raise_for_status()
-            return resp.json()
+            return _normalize_response(resp.json())
 
     def chat_sync(self, message: str, conversation_id: Optional[str] = None) -> dict[str, Any]:
         """Synchronous chat - for use in sync contexts."""
@@ -58,7 +80,7 @@ class OshaaniClient:
                 timeout=60.0,
             )
             resp.raise_for_status()
-            return resp.json()
+            return _normalize_response(resp.json())
 
     async def query_agent(
         self, agent_id: str, message: str, conversation_id: Optional[str] = None
@@ -79,7 +101,7 @@ class OshaaniClient:
                 timeout=60.0,
             )
             resp.raise_for_status()
-            return resp.json()
+            return _normalize_response(resp.json())
 
     def query_agent_sync(
         self, agent_id: str, message: str, conversation_id: Optional[str] = None
@@ -97,7 +119,7 @@ class OshaaniClient:
                 timeout=60.0,
             )
             resp.raise_for_status()
-            return resp.json()
+            return _normalize_response(resp.json())
 
     async def invoke_with_context(
         self,

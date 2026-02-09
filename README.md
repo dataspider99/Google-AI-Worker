@@ -106,6 +106,8 @@ APP_BASE_URL=http://localhost:8000
 # Optional
 AUTOMATION_ENABLED=true
 AUTOMATION_INTERVAL_MINUTES=30
+# Set to false to disable auto-replies in Google Chat (stops new threads being created)
+AUTOMATION_CHAT_AUTO_REPLY_ENABLED=true
 LOG_LEVEL=INFO
 ```
 

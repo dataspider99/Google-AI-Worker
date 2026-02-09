@@ -24,7 +24,7 @@ GOOGLE_SCOPES = [
     "https://www.googleapis.com/auth/gmail.insert",
     "https://www.googleapis.com/auth/gmail.modify",
     "https://www.googleapis.com/auth/gmail.labels",
-    "https://www.googleapis.com/auth/gmail.metadata",
+    # gmail.metadata removed - it conflicts with format=full; gmail.readonly is sufficient
     # Chat - full automation
     "https://www.googleapis.com/auth/chat.spaces.readonly",
     "https://www.googleapis.com/auth/chat.spaces",
@@ -56,6 +56,7 @@ DATA_DIR = Path(os.getenv("DATA_DIR", "./data"))
 # Automation (run workflows continuously for logged-in users)
 AUTOMATION_ENABLED = os.getenv("AUTOMATION_ENABLED", "true").lower() == "true"
 AUTOMATION_INTERVAL_MINUTES = int(os.getenv("AUTOMATION_INTERVAL_MINUTES", "30"))
+AUTOMATION_CHAT_AUTO_REPLY_ENABLED = os.getenv("AUTOMATION_CHAT_AUTO_REPLY_ENABLED", "true").lower() == "true"
 
 # Logging
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")

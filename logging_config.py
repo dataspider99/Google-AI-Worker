@@ -37,3 +37,5 @@ def setup_logging() -> None:
     logging.getLogger("urllib3").setLevel(logging.WARNING)
     logging.getLogger("google").setLevel(logging.WARNING)
     logging.getLogger("googleapiclient").setLevel(logging.WARNING)
+    # Suppress googleapiclient's generic 403 log; we log full details in _log_http_error
+    logging.getLogger("googleapiclient.http").setLevel(logging.ERROR)

@@ -15,13 +15,12 @@ TASKS_DEFAULT_LIST_NAME = "Google Employee"
 
 
 def _log_http_error(operation: str, e: Exception) -> None:
-    """Log 403/API errors with actionable details."""
+    """Log 403/API errors with full details from Google."""
     if isinstance(e, HttpError):
         status = getattr(e.resp, "status", "?") if hasattr(e, "resp") else "?"
         reason = str(e)
-        if status == 403 or "PERMISSION_DENIED" in reason:
-            reason = "PERMISSION_DENIED - Enable Tasks API and add tasks scope in OAuth consent"
-        logger.warning("%s failed (HTTP %s): %s", operation, status, reason)
+        hint = " | Check: Tasks API enabled, OAuth scopes" if status == 403 else ""
+        logger.warning("%s failed (HTTP %s): %s%s", operation, status, reason, hint)
     else:
         logger.warning("%s failed: %s", operation, e)
 
