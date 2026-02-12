@@ -1,0 +1,208 @@
+{% extends "base.html" %}
+{% block title %}Johny Sins – AI workflows for Gmail & Chat{% endblock %}
+
+{% block body %}
+  {% if user_id %}
+  <div class="layout dashboard-app">
+    <aside class="sidebar">
+      <div class="brand">Johny Sins</div>
+      <nav>
+        <a href="/app" class="active">Dashboard</a>
+        <a href="/docs" target="_blank" rel="noopener">API Docs</a>
+        <a href="/health" target="_blank" rel="noopener">Health</a>
+      </nav>
+      <div class="user">
+        <span class="email">{{ user_id }}</span>
+        <a href="/auth/logout" class="logout">Sign out</a>
+      </div>
+    </aside>
+    <main class="main dashboard-main">
+      <h1 class="dashboard-title">Dashboard</h1>
+      <div class="status-strip dashboard-strip">
+        <span class="status-strip-automation">
+          <label class="toggle-wrap" title="Start or stop scheduled Run all for your account">
+            <input type="checkbox" id="automation-toggle" class="automation-toggle" {{ 'checked' if user_automation_enabled else '' }} />
+            <span class="toggle-slider"></span>
+          </label>
+          <span class="badge {{ 'on' if user_automation_enabled else 'off' }}" id="automation-badge">Automation {{ 'On' if user_automation_enabled else 'Off' }}</span>
+        </span>
+        <span class="badge">Interval {{ automation_interval }} min</span>
+        <span class="badge {{ 'on' if chat_auto_reply else 'off' }}">
+          Chat auto-reply {{ 'On' if chat_auto_reply else 'Off' }}
+        </span>
+      </div>
+
+      <div class="keys-row dashboard-keys">
+        <section class="api-key-box">
+          <h2>API key</h2>
+          <div id="api-key-value" class="key-value">••••••••••••</div>
+          <button type="button" class="btn btn-secondary" id="toggle-key">Show key</button>
+          <button type="button" class="btn btn-primary" id="create-key">Generate new key</button>
+          <p class="hint">Use for scripts and MCP: Authorization: Bearer &lt;key&gt;</p>
+        </section>
+        <section class="api-key-box">
+          <h2>Oshaani API key</h2>
+          <p class="hint">Optional: use your own <a href="https://oshaani.com" target="_blank" rel="noopener">Oshaani</a> agent key for workflows. Leave blank to use the server default.</p>
+          <input type="password" id="oshaani-key-input" class="key-input" placeholder="Your Oshaani agent API key" autocomplete="off" />
+          <div class="actions" style="margin-top: 0.75rem;">
+            <button type="button" class="btn btn-primary" id="save-oshaani-key">Save</button>
+            <button type="button" class="btn btn-secondary" id="clear-oshaani-key">Clear</button>
+          </div>
+          <p id="oshaani-key-status" class="hint" style="margin-top: 0.5rem;"></p>
+        </section>
+      </div>
+
+      <h2 class="workflows-heading" style="font-size:1.15rem; margin-bottom: 0.75rem;">Workflows</h2>
+      <p class="hint workflows-hint" style="margin-bottom: 1rem;">Toggle each workflow On to include it in Run all and scheduled automation.</p>
+      <div class="cards dashboard-cards">
+        <div class="card dashboard-card" data-workflow-id="smart_inbox">
+          <div class="card-header-row">
+            <h3>Smart Inbox</h3>
+            <label class="toggle-wrap" title="Include in Run all and automation">
+              <input type="checkbox" class="workflow-toggle" data-workflow-id="smart_inbox" checked />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <p class="desc">Summarize emails, suggest replies, create tasks from action items.</p>
+          <div class="actions">
+            <button type="button" class="btn btn-primary" data-workflow="smart-inbox">Run</button>
+          </div>
+        </div>
+        <div class="card dashboard-card" data-workflow-id="first_email_draft">
+          <div class="card-header-row">
+            <h3>First email draft</h3>
+            <label class="toggle-wrap" title="Workflow enabled">
+              <input type="checkbox" class="workflow-toggle" data-workflow-id="first_email_draft" checked />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <p class="desc">AI drafts a reply to the first (or subject-matched) email; creates Gmail draft.</p>
+          <div class="actions">
+            <button type="button" class="btn btn-primary" data-workflow="first-email-draft">Run</button>
+          </div>
+        </div>
+        <div class="card dashboard-card" data-workflow-id="document_intelligence">
+          <div class="card-header-row">
+            <h3>Document intelligence</h3>
+            <label class="toggle-wrap" title="Include in Run all and automation">
+              <input type="checkbox" class="workflow-toggle" data-workflow-id="document_intelligence" checked />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <p class="desc">Summarize Drive activity and key documents.</p>
+          <div class="actions">
+            <button type="button" class="btn btn-primary" data-workflow="document-intelligence">Run</button>
+          </div>
+        </div>
+        <div class="card dashboard-card" data-workflow-id="chat_auto_reply">
+          <div class="card-header-row">
+            <h3>Chat auto-reply</h3>
+            <label class="toggle-wrap" title="Include in Run all and automation">
+              <input type="checkbox" class="workflow-toggle" data-workflow-id="chat_auto_reply" checked />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <p class="desc">Auto-reply in DM spaces. Included when you run Run all or when automation runs.</p>
+          <div class="actions">
+            <button type="button" class="btn btn-primary" data-workflow="chat-auto-reply">Run (pick space)</button>
+            <button type="button" class="btn btn-primary" data-workflow="chat-auto-reply-batch">Run for top 5</button>
+          </div>
+          <div id="chat-auto-reply-picker" class="chat-auto-reply-picker" style="display:none;">
+            <label for="chat-auto-reply-space">Space:</label>
+            <select id="chat-auto-reply-space"></select>
+            <button type="button" class="btn btn-primary" id="chat-auto-reply-run-selected">Run for selected</button>
+          </div>
+        </div>
+        <div class="card dashboard-card">
+          <div class="card-header-row">
+            <h3>Run all</h3>
+            <label class="toggle-wrap" title="Start or stop scheduled Run all for your account">
+              <input type="checkbox" id="run-all-automation-toggle" class="automation-toggle" {{ 'checked' if user_automation_enabled else '' }} />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <p class="desc">Trigger all workflows that are toggled On above. Toggle On to run them on a schedule; use the button below to run now.</p>
+          <div class="actions">
+            <button type="button" class="btn btn-primary" data-workflow="run-all">Run all</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Response modal: loading + result -->
+      <div id="response-modal" class="modal" aria-hidden="true">
+        <div class="modal-backdrop" id="modal-backdrop"></div>
+        <div class="modal-box">
+          <div class="modal-header">
+            <h2 class="modal-title">Response</h2>
+            <button type="button" class="modal-close" id="modal-close" aria-label="Close">&times;</button>
+          </div>
+          <div class="modal-body">
+            <div id="modal-loading" class="modal-loading" style="display:none;">
+              <div class="loading-spinner" aria-hidden="true"></div>
+              <p class="modal-loading-text" id="modal-loading-text">Running…</p>
+            </div>
+            <div id="modal-content" class="modal-content"></div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+  {% else %}
+  <div class="landing-page">
+    <header class="landing-hero">
+      <h1 class="logo">Johny Sins</h1>
+      <p class="tagline">AI-powered workflows for Gmail, Google Chat, and Drive. Summarize inbox, draft replies, auto-reply in Chat, and automate with <a href="https://oshaani.com" target="_blank" rel="noopener">Oshaani</a> agents.</p>
+      <a href="/auth/google" class="btn-primary">Sign in with Google</a>
+    </header>
+
+    <section class="home-section" id="how-it-works">
+      <h2>How to use it</h2>
+      <ol class="home-steps">
+        <li><strong>Sign in with Google</strong> – Use the button above. We use OAuth; we don’t see your password.</li>
+        <li><strong>Open the dashboard</strong> – After sign-in you’ll see workflows: Smart Inbox, First email draft, Document intelligence, Chat auto-reply, Run all.</li>
+        <li><strong>Run workflows</strong> – Click Run on any workflow. Turn the <strong>Automation</strong> toggle On to run “Run all” on a schedule (e.g. every 30 minutes).</li>
+        <li><strong>Optional: API key</strong> – Generate an API key from the dashboard for scripts or <a href="/docs" target="_blank" rel="noopener">MCP</a> (Cursor, Claude Desktop). Use <code>Authorization: Bearer &lt;key&gt;</code>.</li>
+      </ol>
+    </section>
+
+    <section class="home-section" id="oshaani-key">
+      <h2>How to create an Agent Key in Oshaani</h2>
+      <p>Workflows use Oshaani.com AI agents. You can use the shared server key (with limits) or your own for unlimited runs.</p>
+      <ol class="home-steps">
+        <li>Go to <a href="https://oshaani.com" target="_blank" rel="noopener">oshaani.com</a> and sign up or log in.</li>
+        <li>Create an agent and train it for your use case (e.g. email summaries, reply drafting).</li>
+        <li>Publish the agent and open <strong>API Access</strong> (or Agent → API key).</li>
+        <li>Copy the <strong>Agent API key</strong> and paste it in the dashboard under <strong>Oshaani API key</strong> after signing in here.</li>
+      </ol>
+      <p class="home-note">Your key is stored in your Google Drive (folder “Johny Sins”), not on our server.</p>
+    </section>
+
+    <section class="home-section home-section-highlight" id="free-tier">
+      <h2>Free usage limitation</h2>
+      <p>If you <strong>do not</strong> add your own Oshaani API key:</p>
+      <ul class="home-list">
+        <li>You can run <strong>5 workflows per day</strong> (any combination of Smart Inbox, Document intelligence, Chat auto-reply, First email draft, Run all).</li>
+        <li>After 5 runs, you’ll see a message asking you to add your Oshaani key for more.</li>
+      </ul>
+      <p>Scheduled automation (Run all on a timer) still runs; the limit applies to manual and API-triggered workflow runs when using the server’s default key.</p>
+    </section>
+
+    <section class="home-section" id="upgrade">
+      <h2>Upgrade steps (unlimited runs)</h2>
+      <ol class="home-steps">
+        <li><strong>Create an Oshaani agent</strong> – Follow the steps in “How to create an Agent Key in Oshaani” above.</li>
+        <li><strong>Sign in here</strong> – Use “Sign in with Google” and open the dashboard.</li>
+        <li><strong>Add your key</strong> – In the <strong>Oshaani API key</strong> box, paste your Agent API key and click <strong>Save</strong>. It’s stored in your Google Drive.</li>
+        <li>You now have <strong>unlimited</strong> workflow runs; the daily limit no longer applies to your account.</li>
+      </ol>
+    </section>
+
+    <footer class="landing-footer">
+      <a href="/auth/google" class="btn-primary">Sign in with Google</a>
+      <p class="meta">
+        <a href="/docs" target="_blank" rel="noopener">API docs</a> · <a href="/health" target="_blank" rel="noopener">Health</a> · <a href="https://oshaani.com" target="_blank" rel="noopener">Oshaani</a>
+      </p>
+    </footer>
+  </div>
+  {% endif %}
+{% endblock %}

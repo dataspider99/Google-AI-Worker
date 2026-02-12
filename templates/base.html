@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Johny Sins{% endblock %}</title>
+  <meta name="description" content="{% block meta_description %}AI-powered workflows for Gmail, Google Chat, and Drive. Summarize inbox, draft replies, auto-reply in Chat, and automate with Oshaani agents. Sign in with Google.{% endblock %}">
+  <meta name="keywords" content="{% block meta_keywords %}Johny Sins, Gmail automation, Google Chat AI, Drive summarization, Oshaani, AI workflows, inbox summary, email draft{% endblock %}">
+  <meta property="og:title" content="{% block og_title %}Johny Sins – AI workflows for Gmail & Chat{% endblock %}">
+  <meta property="og:description" content="{% block og_description %}AI-powered workflows for Gmail, Chat, and Drive. Summarize inbox, draft replies, and automate with Oshaani agents. Free tier available.{% endblock %}">
+  <meta property="og:type" content="website">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/styles.css">
+  {% block extra_head %}{% endblock %}
+</head>
+<body>
+  <div class="app">
+    {% block body %}{% endblock %}
+  </div>
+  <script src="/static/app.js"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

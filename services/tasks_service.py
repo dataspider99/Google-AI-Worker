@@ -11,7 +11,7 @@ from googleapiclient.errors import HttpError
 
 logger = logging.getLogger("google_employee.tasks")
 
-TASKS_DEFAULT_LIST_NAME = "Google Employee"
+TASKS_DEFAULT_LIST_NAME = "Johny Sins"
 
 
 def _log_http_error(operation: str, e: Exception) -> None:
@@ -108,7 +108,7 @@ def create_task(
     task_list_id: Optional[str] = None,
 ) -> Optional[dict[str, Any]]:
     """
-    Create a task. Uses "Google Employee" list if task_list_id not provided.
+    Create a task. Uses "Johny Sins" list if task_list_id not provided.
     Returns the created task or None on failure.
     """
     if not task_list_id:

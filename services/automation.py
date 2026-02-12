@@ -7,6 +7,7 @@ from typing import Any, Optional
 from google.oauth2.credentials import Credentials
 
 from services.google_data import fetch_chat_spaces
+from services.oshaani_client import OshaaniClient
 from services.orchestrator import WorkflowOrchestrator
 
 logger = logging.getLogger(__name__)
@@ -19,11 +20,14 @@ def run_all_workflows_for_user(
     include_document_intelligence: bool = True,
     include_chat_auto_reply: bool = True,
     chat_spaces_limit: int = 10,
+    oshaani_api_key: Optional[str] = None,
 ) -> dict[str, Any]:
     """
     Run all enabled workflows for a user. Returns aggregated results.
+    Uses oshaani_api_key if provided, else default from env.
     """
-    orchestrator = WorkflowOrchestrator()
+    client = OshaaniClient(api_key=oshaani_api_key or None)
+    orchestrator = WorkflowOrchestrator(oshaani_client=client)
     results = {"user_id": user_id, "workflows": {}, "errors": []}
 
     # 1. Smart Inbox

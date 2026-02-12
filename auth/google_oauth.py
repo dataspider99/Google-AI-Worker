@@ -1,12 +1,15 @@
 """Google OAuth 2.0 integration for Gmail, Chat, and Workspace APIs."""
 from __future__ import annotations
 
+import logging
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
+import httpx
 
 from config import (
     GOOGLE_CLIENT_ID,
@@ -14,6 +17,8 @@ from config import (
     GOOGLE_REDIRECT_URI,
     GOOGLE_SCOPES,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def create_oauth_flow() -> Flow:
@@ -50,16 +55,51 @@ def get_authorization_url() -> str:
     return auth_url
 
 
+def _parse_token_response(data: dict) -> Credentials:
+    """Build Credentials from Google token endpoint JSON (no scope validation)."""
+    token = data["access_token"]
+    refresh_token = data.get("refresh_token")
+    expires_in = data.get("expires_in", 3600)
+    scope_str = data.get("scope", "")
+    scopes = scope_str.split() if scope_str else list(GOOGLE_SCOPES)
+    expiry = datetime.now(timezone.utc) + timedelta(seconds=expires_in) if expires_in else None
+    return Credentials(
+        token=token,
+        refresh_token=refresh_token,
+        token_uri="https://oauth2.googleapis.com/token",
+        client_id=GOOGLE_CLIENT_ID,
+        client_secret=GOOGLE_CLIENT_SECRET,
+        scopes=scopes,
+        expiry=expiry,
+    )
+
+
 def exchange_code_for_credentials(code: str) -> Credentials:
     """Exchange authorization code for access and refresh tokens."""
-    flow = create_oauth_flow()
-    flow.fetch_token(code=code)
-    return flow.credentials
+    # Do a single token exchange ourselves so we can accept any scope Google returns
+    # (oauthlib raises "Scope has changed" when Google returns reordered/extra scopes).
+    resp = httpx.post(
+        "https://oauth2.googleapis.com/token",
+        data={
+            "code": code,
+            "client_id": GOOGLE_CLIENT_ID,
+            "client_secret": GOOGLE_CLIENT_SECRET,
+            "redirect_uri": GOOGLE_REDIRECT_URI,
+            "grant_type": "authorization_code",
+        },
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        timeout=30.0,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    if "error" in data:
+        raise ValueError(data.get("error_description", data.get("error", "Unknown error")))
+    return _parse_token_response(data)
 
 
 def credentials_to_dict(creds: Credentials) -> dict[str, Any]:
     """Convert credentials to storable dict."""
-    return {
+    result: dict[str, Any] = {
         "token": creds.token,
         "refresh_token": creds.refresh_token,
         "token_uri": creds.token_uri,
@@ -67,10 +107,30 @@ def credentials_to_dict(creds: Credentials) -> dict[str, Any]:
         "client_secret": creds.client_secret,
         "scopes": list(creds.scopes) if creds.scopes else [],
     }
+    if creds.expiry is not None:
+        e = creds.expiry
+        if e.tzinfo is not None:
+            e = e.astimezone(timezone.utc).replace(tzinfo=None)
+        result["expiry"] = e.isoformat() + "Z"
+    return result
+
+
+def _normalize_expiry_to_naive_utc(expiry: datetime) -> datetime:
+    """Return expiry as naive UTC so it matches google.auth's internal comparison."""
+    if expiry.tzinfo is not None:
+        expiry = expiry.astimezone(timezone.utc)
+    return expiry.replace(tzinfo=None)
 
 
 def dict_to_credentials(data: dict[str, Any]) -> Credentials:
     """Reconstruct credentials from stored dict."""
+    expiry = None
+    if data.get("expiry"):
+        try:
+            expiry = datetime.fromisoformat(data["expiry"].replace("Z", "+00:00"))
+            expiry = _normalize_expiry_to_naive_utc(expiry)
+        except (ValueError, TypeError):
+            pass
     return Credentials(
         token=data.get("token"),
         refresh_token=data.get("refresh_token"),
@@ -78,12 +138,30 @@ def dict_to_credentials(data: dict[str, Any]) -> Credentials:
         client_id=data.get("client_id", GOOGLE_CLIENT_ID),
         client_secret=data.get("client_secret", GOOGLE_CLIENT_SECRET),
         scopes=data.get("scopes", GOOGLE_SCOPES),
+        expiry=expiry,
     )
 
 
 def refresh_credentials_if_needed(creds: Credentials) -> Credentials:
-    """Refresh token if expired."""
-    if creds and creds.expired and creds.refresh_token:
+    """Refresh token if expired or missing."""
+    if not creds or not creds.refresh_token:
+        return creds
+    # Refresh when: token missing, expiry unknown (assume stale), or expired.
+    # Avoid creds.expired to prevent naive/aware datetime comparison errors; check ourselves.
+    now_utc = datetime.now(timezone.utc).replace(tzinfo=None)
+    expiry_ok = False
+    if creds.expiry is not None:
+        if creds.expiry.tzinfo is None:
+            expiry_ok = creds.expiry >= now_utc
+        else:
+            exp_naive_utc = creds.expiry.astimezone(timezone.utc).replace(tzinfo=None)
+            expiry_ok = exp_naive_utc >= now_utc
+    needs_refresh = (
+        creds.token is None
+        or (creds.token is not None and creds.expiry is None)
+        or (creds.expiry is not None and not expiry_ok)
+    )
+    if needs_refresh:
         creds.refresh(Request())
     return creds
 

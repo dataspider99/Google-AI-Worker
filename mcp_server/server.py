@@ -19,7 +19,7 @@ logger = logging.getLogger("google_employee.mcp")
 _current_user: ContextVar[Optional[str]] = ContextVar("mcp_user_id", default=None)
 
 MCP_PROTOCOL_VERSION = "2024-11-05"
-SERVER_NAME = "Google Employee"
+SERVER_NAME = "Johny Sins"
 
 
 def get_current_mcp_user() -> str:
@@ -147,7 +147,7 @@ def _handle_tools_list() -> dict:
             },
             {
                 "name": "create_task",
-                "description": "Create a task in Google Tasks (stores in 'Google Employee' list by default)",
+                "description": "Create a task in Google Tasks (stores in 'Johny Sins' list by default)",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -155,7 +155,7 @@ def _handle_tools_list() -> dict:
                         "notes": {"type": "string", "description": "Task notes (optional)"},
                         "task_list_id": {
                             "type": "string",
-                            "description": "Task list ID (optional, default: Google Employee)",
+                            "description": "Task list ID (optional, default: Johny Sins)",
                         },
                     },
                     "required": ["title"],
@@ -170,10 +170,13 @@ def _handle_tools_call(name: str, arguments: dict) -> dict:
     user_id = get_current_mcp_user()
     creds = _get_creds(user_id)
 
-    from services.orchestrator import WorkflowOrchestrator
+    from storage import get_user_oshaani_key
     from services.google_data import fetch_chat_spaces
+    from services.oshaani_client import OshaaniClient
+    from services.orchestrator import WorkflowOrchestrator
 
-    orchestrator = WorkflowOrchestrator()
+    user_oshaani_key = get_user_oshaani_key(user_id)
+    orchestrator = WorkflowOrchestrator(oshaani_client=OshaaniClient(api_key=user_oshaani_key or None))
 
     if name == "smart_inbox":
         req = (arguments or {}).get("request") or "Summarize my inbox and highlight urgent items. Suggest draft replies for the top 3 emails."
@@ -207,7 +210,7 @@ def _handle_tools_call(name: str, arguments: dict) -> dict:
     elif name == "run_all_workflows":
         from services.automation import run_all_workflows_for_user
 
-        result = run_all_workflows_for_user(user_id, creds)
+        result = run_all_workflows_for_user(user_id, creds, oshaani_api_key=user_oshaani_key)
         return {"content": [{"type": "text", "text": json.dumps(result, indent=2)}]}
 
     elif name == "list_task_lists":
@@ -272,6 +275,48 @@ async def mcp_info():
         "methods": ["initialize", "tools/list", "tools/call"],
         "tools": ["smart_inbox", "first_email_draft", "chat_spaces", "document_intelligence", "chat_auto_reply", "run_all_workflows", "list_task_lists", "list_tasks", "create_task"],
     }
+
+
+@router.get("/validate")
+async def mcp_validate(request: Request):
+    """
+    Validate MCP server and optional API key.
+    - No auth: returns server status only.
+    - With Authorization: Bearer <api_key>: validates key, runs initialize + tools/list, returns tool count and user.
+    """
+    user_id = await _resolve_user(request)
+    if not user_id:
+        return {
+            "status": "ok",
+            "mcp": "available",
+            "message": "MCP server is running. Use POST /mcp with JSON-RPC and Authorization: Bearer <api_key>.",
+            "auth": "optional",
+            "validate_key": "Send Authorization: Bearer <your_api_key> to validate your key and list tools",
+        }
+    # With valid key: run initialize + tools/list to confirm full flow
+    try:
+        init_result = _handle_initialize({})
+        tools_result = _handle_tools_list()
+        tools = tools_result.get("tools", [])
+        return {
+            "status": "ok",
+            "mcp": "available",
+            "auth": "valid",
+            "user_id": user_id,
+            "protocol_version": init_result.get("protocolVersion"),
+            "server_name": init_result.get("serverInfo", {}).get("name"),
+            "tools_count": len(tools),
+            "tools": [t.get("name") for t in tools],
+        }
+    except Exception as e:
+        logger.exception("MCP validate error for user %s: %s", user_id, e)
+        return {
+            "status": "error",
+            "mcp": "available",
+            "auth": "valid",
+            "user_id": user_id,
+            "error": str(e),
+        }
 
 
 async def _resolve_user(request: Request) -> Optional[str]:

@@ -13,7 +13,7 @@ from googleapiclient.errors import HttpError
 
 logger = logging.getLogger("google_employee.drive_storage")
 
-APP_FOLDER_NAME = "Google Employee"
+APP_FOLDER_NAME = "Johny Sins"
 USER_DATA_FILENAME = "user_data.json"
 
 
@@ -78,7 +78,7 @@ def _find_user_data_file(service, folder_id: str) -> Optional[str]:
 def save_user_data_to_drive(creds: Credentials, user_id: str, data: dict[str, Any]) -> bool:
     """
     Save user data (credentials, settings, etc.) to user's Drive.
-    Creates/uses folder "Google Employee" and file user_data.json.
+    Creates/uses folder "Johny Sins" and file user_data.json.
     """
     service = get_drive_service(creds)
     folder_id = _get_or_create_app_folder(creds)

@@ -1,4 +1,4 @@
-# Google Employee
+# Johny Sins
 
 An intelligent application that accesses Google data (emails, chat, workspace) via OAuth and integrates with **Oshaani.com** AI agents for automated smart work—acting like a virtual employee.
 
@@ -10,8 +10,10 @@ An intelligent application that accesses Google data (emails, chat, workspace) v
 |---------|-------------|
 | **Multi-user** | Session auth (browser) + API keys (scripts/cron). Each user's data is isolated. |
 | **Automation** | Workflows run continuously for all logged-in users (every 30 min by default). |
-| **Drive storage** | User credentials stored in their Google Drive (folder "Google Employee"). |
-| **Task storage** | Action items from workflows stored in Google Tasks (list "Google Employee"). |
+| **Drive storage** | User credentials stored in their Google Drive (folder "Johny Sins"). |
+| **Task storage** | Action items from workflows stored in Google Tasks (list "Johny Sins"). |
+| **Web UI** | Dashboard at `/app`: sign in with Google, run workflows, manage API key. |
+| **Drive storage** | User credentials and data stored in the user's Google Drive (folder "Johny Sins"). |
 | **MCP server** | HTTP MCP endpoint at `/mcp` for Cursor, Claude Desktop, and other MCP clients. |
 | **Logging** | Configurable logging (DEBUG, INFO, WARNING, ERROR) to stdout. |
 | **Google OAuth** | Access Gmail, Chat, Drive, Docs, Sheets, Tasks |
@@ -39,7 +41,7 @@ An intelligent application that accesses Google data (emails, chat, workspace) v
 
 ```bash
 # Clone or navigate to project
-cd "Google Employee"
+cd "Johny Sins"
 
 # Create virtual environment
 python -m venv venv
@@ -62,7 +64,7 @@ pip install -r requirements.txt
    - Google Tasks API
 4. **Configure the Chat app** (required – fixes 404 "Chat app not found"):
    - Go to [Chat API Configuration](https://console.cloud.google.com/apis/api/chat.googleapis.com/hangouts-chat)
-   - Under **Application info** set: **App name** (e.g. "Google Employee"), **Avatar URL** (optional, HTTPS image), **Description** (e.g. "AI automation for Gmail and Chat")
+   - Under **Application info** set: **App name** (e.g. "Johny Sins"), **Avatar URL** (optional, HTTPS image), **Description** (e.g. "AI automation for Gmail and Chat")
    - Turn **Interactive features** OFF (optional for API-only usage)
    - Click **Save**
 6. Configure OAuth consent screen: **APIs & Services → OAuth consent screen**
@@ -119,6 +121,10 @@ LOG_LEVEL=INFO
 uvicorn main:app --reload --port 8000
 ```
 
+**Web UI:** Open [http://localhost:8000](http://localhost:8000) in a browser. You’ll see the landing page; click **Sign in with Google** to reach the dashboard. From the dashboard you can run workflows and generate API keys.
+
+**Storage:** User data (credentials) is saved to the user's Google Drive in a folder **Johny Sins** (file `user_data.json`). A minimal bootstrap is kept locally so the app can refresh tokens after a restart.
+
 **Docker:**
 
 ```bash
@@ -129,6 +135,73 @@ docker compose up -d
 docker build -t google-employee .
 docker run -p 8000:8000 --env-file .env -v $(pwd)/data:/app/data google-employee
 ```
+
+---
+
+## Production deployment
+
+For production, set the following and run behind HTTPS (reverse proxy recommended).
+
+### Environment variables
+
+| Variable | Production value |
+|---------|------------------|
+| `ENVIRONMENT` | `production` |
+| `SECRET_KEY` | Long random string (e.g. `openssl rand -hex 32`) |
+| `APP_BASE_URL` | Your public URL, e.g. `https://your-domain.com` |
+| `GOOGLE_REDIRECT_URI` | `https://your-domain.com/auth/google/callback` |
+| `CORS_ORIGINS` | Optional; comma-separated allowed origins (default: `APP_BASE_URL` only) |
+| `DATA_DIR` | Persistent volume path, e.g. `/var/lib/google-employee/data` |
+| `LOG_LEVEL` | `INFO` (default in production) |
+
+### Production behavior
+
+- **Session cookies**: When `APP_BASE_URL` is HTTPS, session cookies are set with `Secure` and `SameSite=Lax`.
+- **CORS**: Only `APP_BASE_URL` (or `CORS_ORIGINS`) are allowed; credentials supported.
+- **API docs**: `/docs` and `/redoc` are disabled when `ENVIRONMENT=production` to reduce exposure.
+- **Startup**: App logs `production=True` and warns if `SECRET_KEY` is still the default.
+
+### Run with Uvicorn (single process)
+
+```bash
+export ENVIRONMENT=production
+export PORT=8000
+uvicorn main:app --host 0.0.0.0 --port 8000
+# Or: python main.py  (uses PORT and HOST from env; no reload in production)
+```
+
+### Docker (production)
+
+The Dockerfile sets `ENVIRONMENT=production`, runs as non-root user (UID 1000), and includes a healthcheck on `/health`:
+
+```bash
+docker build -t google-employee .
+docker run -p 8000:8000 \
+  -e ENVIRONMENT=production \
+  -e SECRET_KEY="$(openssl rand -hex 32)" \
+  -e APP_BASE_URL=https://your-domain.com \
+  -e GOOGLE_REDIRECT_URI=https://your-domain.com/auth/google/callback \
+  -v /var/lib/google-employee/data:/app/data \
+  --name google-employee \
+  google-employee
+```
+
+Mount a persistent volume for `DATA_DIR` so credentials and data survive restarts. If you mount a host directory (e.g. `-v ./data:/app/data`), ensure it is writable by UID 1000: `chown 1000:1000 ./data`.
+
+### Reverse proxy (HTTPS)
+
+Run the app on localhost and put **nginx**, **Caddy**, or **Traefik** in front with TLS:
+
+- Terminate SSL at the proxy.
+- Proxy `https://your-domain.com` → `http://127.0.0.1:8000`.
+- Set `APP_BASE_URL=https://your-domain.com` and `GOOGLE_REDIRECT_URI=https://your-domain.com/auth/google/callback` so OAuth and cookies work.
+
+### Google Cloud Console (production)
+
+1. In **APIs & Services → Credentials**, add the production redirect URI: `https://your-domain.com/auth/google/callback`.
+2. If the app is public, complete OAuth consent screen verification as required by Google.
+
+---
 
 ### Step 7: First-Time Login
 
@@ -189,13 +262,15 @@ docker run -p 8000:8000 --env-file .env -v $(pwd)/data:/app/data google-employee
 |--------|----------|------|-------------|
 | GET | `/tasks/lists` | Yes | List Google Task lists |
 | GET | `/tasks/lists/{id}/tasks` | Yes | List tasks in a list |
-| POST | `/tasks` | Yes | Create task (title, notes; uses "Google Employee" list by default) |
+| POST | `/tasks` | Yes | Create task (title, notes; uses "Johny Sins" list by default) |
 
 ### MCP
 
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
 | GET | `/mcp` | No | MCP endpoint info |
+| GET | `/mcp/validate` | No | Validate MCP server is running |
+| GET | `/mcp/validate` | Yes (API key) | Validate API key and list tools |
 | POST | `/mcp` | Yes (API key) | MCP JSON-RPC (tools/list, tools/call) |
 
 ---
@@ -256,6 +331,7 @@ After login, workflows run automatically for all users with credentials:
 
 - `AUTOMATION_ENABLED=true` (default)
 - `AUTOMATION_INTERVAL_MINUTES=30`
+- `AUTOMATION_CHAT_AUTO_REPLY_ENABLED=true` (default) – set to `false` to disable Chat auto-replies
 
 **Manual trigger:** `POST /workflows/run-all`
 
@@ -265,7 +341,7 @@ After login, workflows run automatically for all users with credentials:
 
 User data is stored in the user’s Google Drive:
 
-- **Folder:** `Google Employee` (in Drive root)
+- **Folder:** `Johny Sins` (in Drive root)
 - **File:** `user_data.json` (credentials and settings)
 - **Local bootstrap:** Minimal refresh token kept locally for server restarts
 
@@ -278,6 +354,18 @@ Users who signed in before Drive storage may need to re-auth to grant `drive.fil
 HTTP MCP server at `/mcp` for Cursor, Claude Desktop, and other MCP clients.
 
 **Auth:** `Authorization: Bearer <api_key>`
+
+### Validate MCP server
+
+```bash
+# Check server is up (no auth)
+curl -s http://localhost:8000/mcp/validate
+
+# Validate your API key and list tools
+curl -s http://localhost:8000/mcp/validate -H "Authorization: Bearer ge_your_api_key"
+```
+
+With a valid key, the response includes `"auth": "valid"`, `user_id`, `tools_count`, and `tools` list.
 
 **Tools:**
 

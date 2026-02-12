@@ -1,4 +1,4 @@
-# Google Employee - Docker Compose
+# Johny Sins - Docker Compose
 services:
   app:
     build: .

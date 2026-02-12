@@ -1,4 +1,4 @@
-# Google Employee - Architecture Overview
+# Johny Sins - Architecture Overview
 
 ## Vision
 

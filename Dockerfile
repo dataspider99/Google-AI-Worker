@@ -1,4 +1,4 @@
-# Google Employee - Docker image
+# Johny Sins - Production Docker image
 FROM python:3.11-slim
 
 WORKDIR /app
@@ -7,14 +7,20 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application
+# Copy application (excluding dev/git via .dockerignore)
 COPY . .
 
-# Create data directory for credentials
-RUN mkdir -p /app/data
+# Create data directory and non-root user for security
+RUN mkdir -p /app/data && chown -R 1000:1000 /app
+USER 1000
 
-# Expose port
 EXPOSE 8000
 
-# Run the application
+# Healthcheck for orchestrators (Kubernetes, Docker Swarm, etc.)
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')" || exit 1
+
+# Production: no reload, single worker (scheduler runs in-process)
+ENV ENVIRONMENT=production
+ENV PORT=8000
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
