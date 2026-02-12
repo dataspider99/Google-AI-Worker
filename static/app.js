@@ -11,6 +11,7 @@
   const modalBackdrop = document.getElementById('modal-backdrop');
   const oshaaniKeyInput = document.getElementById('oshaani-key-input');
   const saveOshaaniKeyBtn = document.getElementById('save-oshaani-key');
+  const testOshaaniKeyBtn = document.getElementById('test-oshaani-key');
   const clearOshaaniKeyBtn = document.getElementById('clear-oshaani-key');
   const oshaaniKeyStatus = document.getElementById('oshaani-key-status');
 
@@ -73,10 +74,10 @@
           toggleKeyBtn.textContent = 'Hide key';
           showResult('New API key created. Copy it now; it won’t be shown again.', false);
         } else {
-          showResult(JSON.stringify(data, null, 2), true);
+          showResult(data, true);
         }
       } catch (e) {
-        showResult('Error: ' + e.message, true);
+        showResult({ detail: e.message || 'Network or unexpected error.' }, true);
       }
       createKeyBtn.disabled = false;
       createKeyBtn.textContent = 'Generate new key';
@@ -109,11 +110,10 @@
         if (r.ok) {
           showResult(data, false);
         } else {
-          var errMsg = data.detail || data.message || data;
-          showResult(typeof errMsg === 'object' ? JSON.stringify(errMsg, null, 2) : errMsg, true);
+          showResult(data, true);
         }
       } catch (e) {
-        showResult('Error: ' + e.message, true);
+        showResult({ detail: e.message || 'Network or unexpected error.' }, true);
       }
       if (cards) cards.classList.remove('loading');
     });
@@ -129,13 +129,13 @@
       const r = await fetch('/workflows/chat-spaces', { credentials: 'include' });
       const data = await r.json();
       if (!r.ok) {
-        showResult(data.detail || data.hint || JSON.stringify(data), true);
+        showResult(data, true);
         if (cards) cards.classList.remove('loading');
         return;
       }
       var spaces = (data.spaces || []).filter(function (s) { return s.type === 'DIRECT_MESSAGE'; });
       if (spaces.length === 0) {
-        showResult((data.hint || 'No DM spaces found. Start a direct message in Google Chat first.') + (data.spaces && data.spaces.length ? ' (Only DM spaces can be used for auto-reply.)' : ''), true);
+        showResult(data, true);
         if (pickerEl) pickerEl.style.display = 'none';
         if (cards) cards.classList.remove('loading');
         return;
@@ -157,7 +157,7 @@
         pickerEl.style.display = 'flex';
       }
     } catch (e) {
-      showResult('Error: ' + e.message, true);
+      showResult({ detail: e.message || 'Network or unexpected error.' }, true);
     }
     if (cards) cards.classList.remove('loading');
   }
@@ -172,11 +172,10 @@
       if (r.ok) {
         showResult(data, false);
       } else {
-        var errMsg = data.detail || data.message || data;
-        showResult(typeof errMsg === 'object' ? JSON.stringify(errMsg, null, 2) : errMsg, true);
+        showResult(data, true);
       }
     } catch (e) {
-      showResult('Error: ' + e.message, true);
+      showResult({ detail: e.message || 'Network or unexpected error.' }, true);
     }
     if (cards) cards.classList.remove('loading');
   }
@@ -200,11 +199,10 @@
       if (r.ok) {
         showResult(data, false);
       } else {
-        var errMsg = data.detail || data.message || data;
-        showResult(typeof errMsg === 'object' ? JSON.stringify(errMsg, null, 2) : errMsg, true);
+        showResult(data, true);
       }
     } catch (e) {
-      showResult('Error: ' + e.message, true);
+      showResult({ detail: e.message || 'Network or unexpected error.' }, true);
     }
     if (cards) cards.classList.remove('loading');
   }
@@ -243,6 +241,20 @@
     };
     if (data.response !== undefined && data.response !== '') {
       addSection('Response', String(data.response));
+    }
+    if (data.tasks_created && Array.isArray(data.tasks_created) && data.tasks_created.length > 0) {
+      var tasksSection = document.createElement('div');
+      tasksSection.className = 'result-section';
+      tasksSection.innerHTML = '<h4 class="result-heading">Google Tasks created</h4>';
+      var tasksList = document.createElement('ul');
+      tasksList.className = 'result-tasks-list';
+      data.tasks_created.forEach(function (t) {
+        var li = document.createElement('li');
+        li.textContent = (t.title || 'Task') + (t.notes ? ' — ' + t.notes : '');
+        tasksList.appendChild(li);
+      });
+      tasksSection.appendChild(tasksList);
+      frag.appendChild(tasksSection);
     }
     if (data.status) {
       var statusSection = document.createElement('div');
@@ -291,7 +303,7 @@
       batchWrap.appendChild(batchDiv);
       frag.appendChild(batchWrap);
     }
-    var skip = { response: 1, status: 1, message: 1, workflows: 1, total: 1, spaces: 1 };
+    var skip = { response: 1, status: 1, message: 1, workflows: 1, total: 1, spaces: 1, tasks_created: 1 };
     var others = [];
     Object.keys(data).forEach(function (k) {
       if (skip[k]) return;
@@ -324,6 +336,23 @@
     return frag;
   }
 
+  /** Build a clear error message from API response (detail can be string or list of validation errors). */
+  function formatErrorMessage(data) {
+    if (data == null) return 'An error occurred.';
+    var detail = data.detail;
+    if (detail == null) return data.message || JSON.stringify(data);
+    if (typeof detail === 'string') return detail;
+    if (Array.isArray(detail)) {
+      var lines = detail.map(function (d) {
+        var loc = d.loc ? d.loc.join(' ') : '';
+        var msg = d.msg || d.message || JSON.stringify(d);
+        return loc ? loc + ': ' + msg : msg;
+      });
+      return lines.join('\n');
+    }
+    return JSON.stringify(detail);
+  }
+
   function showResult(textOrData, isError) {
     var target = modalContentEl || runResultEl;
     if (!target) return;
@@ -331,10 +360,28 @@
     if (modalContentEl) modalContentEl.style.display = 'block';
     target.classList.toggle('error', isError);
     target.innerHTML = '';
-    if (isError || typeof textOrData === 'string') {
+    if (isError) {
+      var wrap = document.createElement('div');
+      wrap.className = 'result-error-wrap';
+      var heading = document.createElement('div');
+      heading.className = 'result-error-heading';
+      heading.textContent = 'Error';
+      wrap.appendChild(heading);
+      var msg = document.createElement('div');
+      msg.className = 'result-error-detail';
+      var text = typeof textOrData === 'string' ? textOrData : (textOrData && typeof textOrData === 'object' ? formatErrorMessage(textOrData) : String(textOrData));
+      msg.textContent = text;
+      msg.style.whiteSpace = 'pre-wrap';
+      msg.style.wordBreak = 'break-word';
+      wrap.appendChild(msg);
+      target.appendChild(wrap);
+      openModal();
+      return;
+    }
+    if (typeof textOrData === 'string') {
       var p = document.createElement('div');
       p.className = 'result-text';
-      p.textContent = typeof textOrData === 'string' ? textOrData : JSON.stringify(textOrData);
+      p.textContent = textOrData;
       target.appendChild(p);
       openModal();
       return;
@@ -367,8 +414,10 @@
       const r = await fetch('/me/oshaani-key', { credentials: 'include' });
       const data = await r.json();
       oshaaniKeyStatus.textContent = data.hint || '';
+      oshaaniKeyStatus.classList.toggle('status-key-set', !!data.set);
     } catch (e) {
       oshaaniKeyStatus.textContent = '';
+      oshaaniKeyStatus.classList.remove('status-key-set');
     }
   }
   if (saveOshaaniKeyBtn && oshaaniKeyInput) {
@@ -389,13 +438,37 @@
           oshaaniKeyInput.value = '';
           showResult(data.message || 'Saved.', false);
         } else {
-          showResult(data.detail || data.message || 'Failed', true);
+          showResult(data, true);
         }
       } catch (e) {
-        showResult('Error: ' + e.message, true);
+        showResult({ detail: e.message || 'Network or unexpected error.' }, true);
       }
       saveOshaaniKeyBtn.disabled = false;
       saveOshaaniKeyBtn.textContent = 'Save';
+    });
+  }
+  if (testOshaaniKeyBtn) {
+    testOshaaniKeyBtn.addEventListener('click', async function () {
+      testOshaaniKeyBtn.disabled = true;
+      var keyToTest = oshaaniKeyInput && oshaaniKeyInput.value ? oshaaniKeyInput.value.trim() : '';
+      showModalLoading(keyToTest ? 'Testing key…' : 'Testing saved key…');
+      try {
+        const r = await fetch('/me/oshaani-key/test', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ oshaani_api_key: keyToTest }),
+        });
+        const data = await r.json().catch(function () { return { detail: 'Invalid response from server.' }; });
+        if (r.ok && data.valid) {
+          showResult(data.message || 'Key is valid.', false);
+        } else {
+          showResult(data, true);
+        }
+      } catch (e) {
+        showResult({ detail: e.message || 'Network or unexpected error.' }, true);
+      }
+      testOshaaniKeyBtn.disabled = false;
     });
   }
   if (clearOshaaniKeyBtn) {
@@ -413,12 +486,20 @@
         if (oshaaniKeyInput) oshaaniKeyInput.value = '';
         showResult('Cleared. Using default key.', false);
       } catch (e) {
-        showResult('Error: ' + e.message, true);
+        showResult({ detail: e.message || 'Network or unexpected error.' }, true);
       }
       clearOshaaniKeyBtn.disabled = false;
     });
   }
   loadOshaaniKeyStatus();
+
+  function updateChatAutoReplyBadge(on) {
+    var badge = document.getElementById('chat-auto-reply-badge');
+    if (!badge) return;
+    badge.textContent = 'Chat auto-reply ' + (on ? 'On' : 'Off');
+    badge.classList.toggle('on', !!on);
+    badge.classList.toggle('off', !on);
+  }
 
   // Workflow toggles: load state, then save on change
   async function loadWorkflowToggles() {
@@ -431,6 +512,7 @@
         var card = cb.closest('.card');
         if (card) card.classList.toggle('workflow-off', !cb.checked);
       });
+      updateChatAutoReplyBadge(toggles.chat_auto_reply !== false);
     } catch (e) {
       // leave defaults (all checked)
     }
@@ -452,25 +534,39 @@
         if (r.ok) {
           var card = cb.closest('.card');
           if (card) card.classList.toggle('workflow-off', !cb.checked);
+          if (id === 'chat_auto_reply') updateChatAutoReplyBadge(cb.checked);
         } else {
           cb.checked = !cb.checked;
           var card = cb.closest('.card');
           if (card) card.classList.toggle('workflow-off', !cb.checked);
+          if (id === 'chat_auto_reply') updateChatAutoReplyBadge(cb.checked);
         }
       } catch (e) {
         cb.checked = !cb.checked;
         var card = cb.closest('.card');
         if (card) card.classList.toggle('workflow-off', !cb.checked);
+        if (id === 'chat_auto_reply') updateChatAutoReplyBadge(cb.checked);
       }
     });
   });
 
   loadWorkflowToggles();
 
-  // Automation (Run all on schedule) on/off toggle – status strip and Run all card stay in sync
+  // Automation (Run all on schedule) on/off toggle – on Run all card only
   var automationToggle = document.getElementById('automation-toggle');
-  var runAllAutomationToggle = document.getElementById('run-all-automation-toggle');
   var automationBadge = document.getElementById('automation-badge');
+
+  // Load saved automation state on page load so checkbox matches persisted value
+  (function loadAutomationState() {
+    if (!automationToggle) return;
+    fetch('/me/automation', { credentials: 'include', cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : Promise.reject(); })
+      .then(function (data) {
+        var enabled = data.enabled === true || data.enabled === 'true';
+        automationToggle.checked = enabled;
+      })
+      .catch(function () {});
+  })();
 
   function syncAutomationUI(enabled) {
     if (automationBadge) {
@@ -478,12 +574,12 @@
       automationBadge.classList.toggle('on', !!enabled);
       automationBadge.classList.toggle('off', !enabled);
     }
-    if (automationToggle && automationToggle.checked !== enabled) automationToggle.checked = !!enabled;
-    if (runAllAutomationToggle && runAllAutomationToggle.checked !== enabled) runAllAutomationToggle.checked = !!enabled;
+    if (automationToggle && automationToggle.checked !== enabled) {
+      automationToggle.checked = !!enabled;
+    }
   }
 
-  function handleAutomationChange(sourceChecked) {
-    var enabled = sourceChecked;
+  function handleAutomationChange(enabled) {
     fetch('/me/automation', {
       method: 'PUT',
       credentials: 'include',
@@ -498,18 +594,22 @@
         syncAutomationUI(data.enabled);
       })
       .catch(function () {
-        syncAutomationUI(!enabled);
+        // Don't revert UI – leave toggle as user set it; show error so they know save failed
+        var msg = document.getElementById('automation-error-msg');
+        if (msg) {
+          msg.textContent = 'Could not save. Try again or check Drive access.';
+          msg.style.display = 'block';
+          setTimeout(function () { msg.style.display = 'none'; }, 5000);
+        }
       });
   }
 
   if (automationToggle) {
     automationToggle.addEventListener('change', function () {
-      handleAutomationChange(automationToggle.checked);
-    });
-  }
-  if (runAllAutomationToggle) {
-    runAllAutomationToggle.addEventListener('change', function () {
-      handleAutomationChange(runAllAutomationToggle.checked);
+      var enabled = automationToggle.checked;
+      var msg = document.getElementById('automation-error-msg');
+      if (msg) msg.style.display = 'none';
+      handleAutomationChange(enabled);
     });
   }
 })();

@@ -30,14 +30,14 @@ def test_me_with_session_override(client_with_auth):
     r = client_with_auth.get("/me")
     assert r.status_code == 200
     data = r.json()
-    assert data.get("email") == "test@example.com"
+    assert data.get("user_id") == "test@example.com"
 
 
 def test_me_with_api_key(client, api_key_for_user):
     r = client.get("/me", headers={"Authorization": f"Bearer {api_key_for_user}"})
     assert r.status_code == 200
     data = r.json()
-    assert data.get("email") == "test@example.com"
+    assert data.get("user_id") == "test@example.com"
 
 
 def test_workflow_toggles_with_auth(client_with_auth):

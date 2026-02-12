@@ -20,17 +20,18 @@
       <h1 class="dashboard-title">Dashboard</h1>
       <div class="status-strip dashboard-strip">
         <span class="status-strip-automation">
-          <label class="toggle-wrap" title="Start or stop scheduled Run all for your account">
-            <input type="checkbox" id="automation-toggle" class="automation-toggle" {{ 'checked' if user_automation_enabled else '' }} />
+          <label class="toggle-wrap" title="Start or stop scheduled Run all">
+            <input type="checkbox" id="automation-toggle" class="automation-toggle" {{ automation_checked_attr }} />
             <span class="toggle-slider"></span>
           </label>
           <span class="badge {{ 'on' if user_automation_enabled else 'off' }}" id="automation-badge">Automation {{ 'On' if user_automation_enabled else 'Off' }}</span>
         </span>
         <span class="badge">Interval {{ automation_interval }} min</span>
-        <span class="badge {{ 'on' if chat_auto_reply else 'off' }}">
+        <span id="chat-auto-reply-badge" class="badge {{ 'on' if chat_auto_reply else 'off' }}">
           Chat auto-reply {{ 'On' if chat_auto_reply else 'Off' }}
         </span>
       </div>
+      <p id="automation-error-msg" class="hint" style="display:none; color: var(--error, #c00); margin-top: 0.25rem;"></p>
 
       <div class="keys-row dashboard-keys">
         <section class="api-key-box">
@@ -46,6 +47,7 @@
           <input type="password" id="oshaani-key-input" class="key-input" placeholder="Your Oshaani agent API key" autocomplete="off" />
           <div class="actions" style="margin-top: 0.75rem;">
             <button type="button" class="btn btn-primary" id="save-oshaani-key">Save</button>
+            <button type="button" class="btn btn-secondary" id="test-oshaani-key">Test key</button>
             <button type="button" class="btn btn-secondary" id="clear-oshaani-key">Clear</button>
           </div>
           <p id="oshaani-key-status" class="hint" style="margin-top: 0.5rem;"></p>
@@ -63,7 +65,7 @@
               <span class="toggle-slider"></span>
             </label>
           </div>
-          <p class="desc">Summarize emails, suggest replies, create tasks from action items.</p>
+          <p class="desc">Summarize emails, suggest replies, and create action items in your <strong>Google Tasks</strong> (list &quot;Johny Sins&quot;).</p>
           <div class="actions">
             <button type="button" class="btn btn-primary" data-workflow="smart-inbox">Run</button>
           </div>
@@ -114,14 +116,8 @@
           </div>
         </div>
         <div class="card dashboard-card">
-          <div class="card-header-row">
-            <h3>Run all</h3>
-            <label class="toggle-wrap" title="Start or stop scheduled Run all for your account">
-              <input type="checkbox" id="run-all-automation-toggle" class="automation-toggle" {{ 'checked' if user_automation_enabled else '' }} />
-              <span class="toggle-slider"></span>
-            </label>
-          </div>
-          <p class="desc">Trigger all workflows that are toggled On above. Toggle On to run them on a schedule; use the button below to run now.</p>
+          <h3>Run all</h3>
+          <p class="desc">Trigger all workflows that are toggled On above. Use the Automation toggle in the status bar to run on a schedule; use the button below to run now.</p>
           <div class="actions">
             <button type="button" class="btn btn-primary" data-workflow="run-all">Run all</button>
           </div>

@@ -125,16 +125,96 @@ uvicorn main:app --reload --port 8000
 
 **Storage:** User data (credentials) is saved to the user's Google Drive in a folder **Johny Sins** (file `user_data.json`). A minimal bootstrap is kept locally so the app can refresh tokens after a restart.
 
-**Docker:**
+---
+
+### Run with Docker
+
+You can set up and run the application using Docker so you don’t need to install Python or dependencies on the host.
+
+#### Prerequisites
+
+- [Docker](https://docs.docker.com/get-docker/) (and optionally [Docker Compose](https://docs.docker.com/compose/install/))
+- A `.env` file with the same variables as in **Step 5: Configure** (Google OAuth, Oshaani, `APP_BASE_URL`, `SECRET_KEY`, etc.)
+
+#### Option A: Docker Compose (recommended)
+
+1. **Configure:** Copy and edit `.env` in the project root (see Step 5 above).
+
+2. **Build and run:**
+
+   ```bash
+   cd "Johny Sins"
+   docker compose up -d
+   ```
+
+   This builds the image, loads variables from `.env`, mounts `./data` for persistence, and runs the app in the background. The web UI and MCP are at **http://localhost:8000**.
+
+3. **Useful commands:**
+
+   ```bash
+   docker compose logs -f    # Follow logs
+   docker compose down      # Stop and remove containers
+   docker compose up -d --build   # Rebuild and start after code changes
+   ```
+
+#### Option B: Build and run with `docker run`
+
+1. **Configure:** Ensure `.env` exists in the project root with all required variables.
+
+2. **Build the image:**
+
+   ```bash
+   cd "Johny Sins"
+   docker build -t johny-sins .
+   ```
+
+3. **Run the container:**
+
+   ```bash
+   docker run -d \
+     --name johny-sins \
+     -p 8000:8000 \
+     --env-file .env \
+     -v "$(pwd)/data:/app/data" \
+     johny-sins
+   ```
+
+   - `-p 8000:8000` — exposes the app on port 8000.
+   - `--env-file .env` — loads environment variables from `.env`.
+   - `-v "$(pwd)/data:/app/data"` — persists bootstrap credentials and API keys; ensure `./data` is writable (container runs as UID 1000).
+
+4. **Useful commands:**
+
+   ```bash
+   docker logs -f johny-sins    # Follow logs
+   docker stop johny-sins      # Stop
+   docker start johny-sins     # Start again
+   docker rm -f johny-sins     # Remove container (data in ./data is kept)
+   ```
+
+#### Option C: Use a pre-built image from a registry
+
+If you have the image in a registry (Docker Hub, GHCR, etc.):
 
 ```bash
-# Build and run with docker-compose
-docker compose up -d
+# Pull (replace with your registry path)
+docker pull YOUR_REGISTRY/johny-sins:latest
 
-# Or build and run manually
-docker build -t google-employee .
-docker run -p 8000:8000 --env-file .env -v $(pwd)/data:/app/data google-employee
+# Run with your .env and data volume
+docker run -d \
+  --name johny-sins \
+  -p 8000:8000 \
+  --env-file .env \
+  -v "$(pwd)/data:/app/data" \
+  YOUR_REGISTRY/johny-sins:latest
 ```
+
+#### Docker image details
+
+- **Base:** `python:3.11-slim`
+- **Runs as:** non-root user (UID 1000)
+- **Healthcheck:** `GET /health` every 30s (used by orchestrators)
+- **Data:** Mount a volume at `/app/data` so credentials and API keys survive restarts. If you use a host directory, ensure it is writable by UID 1000: `chown 1000:1000 ./data`
 
 ---
 
@@ -151,7 +231,7 @@ For production, set the following and run behind HTTPS (reverse proxy recommende
 | `APP_BASE_URL` | Your public URL, e.g. `https://your-domain.com` |
 | `GOOGLE_REDIRECT_URI` | `https://your-domain.com/auth/google/callback` |
 | `CORS_ORIGINS` | Optional; comma-separated allowed origins (default: `APP_BASE_URL` only) |
-| `DATA_DIR` | Persistent volume path, e.g. `/var/lib/google-employee/data` |
+| `DATA_DIR` | Persistent volume path, e.g. `/var/lib/johny-sins/data` (default in container: `/app/data`) |
 | `LOG_LEVEL` | `INFO` (default in production) |
 
 ### Production behavior
@@ -172,21 +252,31 @@ uvicorn main:app --host 0.0.0.0 --port 8000
 
 ### Docker (production)
 
-The Dockerfile sets `ENVIRONMENT=production`, runs as non-root user (UID 1000), and includes a healthcheck on `/health`:
+The Dockerfile sets `ENVIRONMENT=production`, runs as non-root user (UID 1000), and includes a healthcheck on `/health`. Use a production `.env` or pass variables explicitly:
 
 ```bash
-docker build -t google-employee .
-docker run -p 8000:8000 \
+docker build -t johny-sins .
+docker run -d -p 8000:8000 \
+  --env-file .env \
+  -v /var/lib/johny-sins/data:/app/data \
+  --name johny-sins \
+  johny-sins
+```
+
+Or with inline env vars:
+
+```bash
+docker run -d -p 8000:8000 \
   -e ENVIRONMENT=production \
   -e SECRET_KEY="$(openssl rand -hex 32)" \
   -e APP_BASE_URL=https://your-domain.com \
   -e GOOGLE_REDIRECT_URI=https://your-domain.com/auth/google/callback \
-  -v /var/lib/google-employee/data:/app/data \
-  --name google-employee \
-  google-employee
+  -v /var/lib/johny-sins/data:/app/data \
+  --name johny-sins \
+  johny-sins
 ```
 
-Mount a persistent volume for `DATA_DIR` so credentials and data survive restarts. If you mount a host directory (e.g. `-v ./data:/app/data`), ensure it is writable by UID 1000: `chown 1000:1000 ./data`.
+Mount a persistent volume for `/app/data` so credentials and data survive restarts. If you use a host directory (e.g. `-v ./data:/app/data`), ensure it is writable by UID 1000: `chown 1000:1000 ./data`.
 
 ### Reverse proxy (HTTPS)
 

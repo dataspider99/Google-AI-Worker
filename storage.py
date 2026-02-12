@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 API_KEYS_FILE = "api_keys.json"
 BOOTSTRAP_PREFIX = "bootstrap_"
 USER_SETTINGS_PREFIX = "user_settings_"
+AUTOMATION_LOCAL_PREFIX = "automation_"
 
 
 def ensure_data_dir_ready() -> Path:
@@ -164,8 +165,19 @@ def load_credentials(user_id: str) -> Optional[dict]:
     if not path.exists():
         return None
 
-    with open(path) as f:
-        bootstrap = json.load(f)
+    try:
+        with open(path) as f:
+            content = f.read().strip()
+            if not content:
+                logger.warning("Bootstrap file empty for %s: %s", user_id, path)
+                return None
+            bootstrap = json.loads(content)
+    except json.JSONDecodeError as e:
+        logger.warning("Bootstrap file invalid JSON for %s (%s): %s", user_id, path, e)
+        return None
+    except OSError as e:
+        logger.warning("Cannot read bootstrap for %s: %s", user_id, e)
+        return None
 
     from auth.google_oauth import credentials_to_dict, dict_to_credentials, refresh_credentials_if_needed
 
@@ -350,8 +362,34 @@ def set_user_workflow_toggles(user_id: str, toggles: dict[str, bool]) -> None:
         raise RuntimeError(f"Could not save toggles: {e}") from e
 
 
+def _automation_local_path(user_id: str) -> Path:
+    return DATA_DIR / f"{AUTOMATION_LOCAL_PREFIX}{_safe_filename(user_id)}.json"
+
+
+def _parse_enabled_value(val: Any) -> bool:
+    """Parse enabled flag from JSON (bool or string 'true'/'false')."""
+    if val is None:
+        return True
+    if isinstance(val, bool):
+        return val
+    if isinstance(val, str):
+        return val.strip().lower() in ("true", "1", "on", "yes")
+    return bool(val)
+
+
 def get_user_automation_enabled(user_id: str) -> bool:
-    """Return whether the user has scheduled Run-all automation enabled. Default True."""
+    """Return whether the user has scheduled Run-all automation enabled. Default True.
+    Reads from local file first (so preference persists even when Drive fails), then Drive."""
+    # Local file takes precedence so we never lose the user's choice
+    local_path = _automation_local_path(user_id)
+    if local_path.exists():
+        try:
+            with open(local_path) as f:
+                data = json.load(f)
+            if "enabled" in data:
+                return _parse_enabled_value(data["enabled"])
+        except (json.JSONDecodeError, OSError):
+            pass
     cred_data = load_credentials(user_id)
     if not cred_data:
         return True
@@ -362,16 +400,24 @@ def get_user_automation_enabled(user_id: str) -> bool:
         drive_data = load_user_data_from_drive(creds, user_id)
         if not drive_data or "automation_enabled" not in drive_data:
             return True
-        return bool(drive_data["automation_enabled"])
+        return _parse_enabled_value(drive_data["automation_enabled"])
     except Exception:
         return True
 
 
 def set_user_automation_enabled(user_id: str, enabled: bool) -> None:
-    """Save user's automation on/off to Google Drive."""
+    """Save user's automation on/off. Always persists locally first; then syncs to Drive when possible."""
+    local_path = _automation_local_path(user_id)
+    try:
+        _ensure_data_dir()
+        with open(local_path, "w") as f:
+            json.dump({"enabled": bool(enabled)}, f)
+    except OSError as e:
+        raise RuntimeError(f"Cannot save automation preference: {e}") from e
+    # Sync to Drive when possible; do not fail the request if Drive fails
     cred_data = load_credentials(user_id)
     if not cred_data:
-        raise RuntimeError("User not logged in; cannot save to Drive")
+        return
     try:
         from auth.google_oauth import dict_to_credentials
         from services.drive_storage import load_user_data_from_drive, save_user_data_to_drive
@@ -380,8 +426,6 @@ def set_user_automation_enabled(user_id: str, enabled: bool) -> None:
         existing["automation_enabled"] = bool(enabled)
         existing = _make_json_safe(existing)
         if not save_user_data_to_drive(creds, user_id, existing):
-            raise RuntimeError("Could not save to Drive")
-    except RuntimeError:
-        raise
+            logger.warning("Could not sync automation_enabled to Drive for %s", user_id)
     except Exception as e:
-        raise RuntimeError(f"Could not save: {e}") from e
+        logger.warning("Drive sync for automation_enabled failed: %s", e)

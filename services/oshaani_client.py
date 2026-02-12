@@ -153,3 +153,26 @@ Please process the above and respond accordingly. Use the context to answer ques
 
 Please process the above and respond accordingly. Use the context to answer questions, draft replies, summarize, or take actions as appropriate."""
         return self.chat_sync(full_message, conversation_id)
+
+
+def validate_oshaani_api_key(api_key: str, base_url: Optional[str] = None) -> None:
+    """
+    Validate an Oshaani API key by making a minimal chat request.
+    Raises ValueError with a user-friendly message if the key is invalid (401/403 or API error).
+    """
+    if not (api_key or "").strip():
+        raise ValueError("API key is empty")
+    url = (base_url or OSHAANI_API_BASE_URL).rstrip("/")
+    client = OshaaniClient(base_url=url, api_key=api_key.strip())
+    try:
+        client.chat_sync("OK")
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code in (401, 403):
+            raise ValueError(
+                "Invalid Oshaani API key. Check the key from your Oshaani dashboard (Agent → API Access) and try again."
+            ) from e
+        raise ValueError(
+            f"Oshaani API error ({e.response.status_code}): {(e.response.text[:200] if e.response.text else str(e))}"
+        ) from e
+    except httpx.RequestError as e:
+        raise ValueError(f"Cannot reach Oshaani: {e}") from e

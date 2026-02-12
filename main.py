@@ -65,13 +65,15 @@ app = FastAPI(
 
 @app.exception_handler(Exception)
 def unhandled_exception_handler(request: Request, exc: Exception):
-    """Log unhandled exceptions (re-raise HTTPException for proper handling)."""
+    """Log unhandled exceptions (re-raise HTTPException for proper handling). Return clear error detail for UI."""
     from fastapi.responses import JSONResponse
 
     if isinstance(exc, HTTPException):
         raise exc
     logger.exception("Unhandled exception: %s", exc)
-    return JSONResponse(status_code=500, content={"detail": "Internal server error"})
+    # In production return generic message; in dev return actual error so UI can show it
+    detail = "Internal server error" if PRODUCTION else str(exc)
+    return JSONResponse(status_code=500, content={"detail": detail})
 
 
 # CORS: in production allow only APP_BASE_URL (or CORS_ORIGINS); in dev allow common origins
@@ -115,19 +117,33 @@ _scheduler = None
 
 def _run_automation_for_all_users():
     """Run all workflows for every user with credentials."""
+    logger.debug("Automation job started (AUTOMATION_ENABLED=%s, AUTOMATION_CHAT_AUTO_REPLY_ENABLED=%s)",
+                 AUTOMATION_ENABLED, AUTOMATION_CHAT_AUTO_REPLY_ENABLED)
     if not AUTOMATION_ENABLED:
+        logger.debug("Automation job skipped: AUTOMATION_ENABLED is False")
         return
     include_chat = AUTOMATION_CHAT_AUTO_REPLY_ENABLED
     users = list_users()
+    logger.debug("Automation job: list_users() returned %d user(s): %s", len(users), users)
     if not users:
+        logger.debug("Automation job finished: no users")
         return
     logger.info("Running automation for %d user(s)", len(users))
+    processed = 0
+    skipped = 0
+    failed = 0
     for user_id in users:
         try:
-            if not get_user_automation_enabled(user_id):
+            automation_on = get_user_automation_enabled(user_id)
+            logger.debug("User %s: automation_enabled=%s", user_id, automation_on)
+            if not automation_on:
+                skipped += 1
+                logger.debug("User %s: skipped (automation toggle off)", user_id)
                 continue
             cred_data = load_credentials(user_id)
             if not cred_data:
+                skipped += 1
+                logger.debug("User %s: skipped (no credentials)", user_id)
                 continue
             from auth.google_oauth import dict_to_credentials
             from services.automation import run_all_workflows_for_user
@@ -135,17 +151,29 @@ def _run_automation_for_all_users():
 
             creds_obj = dict_to_credentials(cred_data)
             toggles = get_user_workflow_toggles(user_id)
-            run_all_workflows_for_user(
+            include_si = toggles.get("smart_inbox", True)
+            include_di = toggles.get("document_intelligence", True)
+            include_car = toggles.get("chat_auto_reply", True) and include_chat
+            user_key = get_user_oshaani_key(user_id)
+            logger.debug("User %s: toggles smart_inbox=%s document_intelligence=%s chat_auto_reply=%s (include_chat=%s), oshaani_key_set=%s",
+                         user_id, include_si, include_di, include_car, include_chat, bool(user_key))
+            result = run_all_workflows_for_user(
                 user_id,
                 creds_obj,
-                include_smart_inbox=toggles.get("smart_inbox", True),
-                include_document_intelligence=toggles.get("document_intelligence", True),
-                include_chat_auto_reply=toggles.get("chat_auto_reply", True) and include_chat,
-                oshaani_api_key=get_user_oshaani_key(user_id),
+                include_smart_inbox=include_si,
+                include_document_intelligence=include_di,
+                include_chat_auto_reply=include_car,
+                oshaani_api_key=user_key,
             )
+            processed += 1
+            logger.debug("User %s: run_all_workflows_for_user result: workflows=%s errors=%s",
+                         user_id, result.get("workflows"), result.get("errors"))
             logger.info("Automation completed for %s", user_id)
         except Exception as e:
+            failed += 1
             logger.warning("Automation failed for %s: %s", user_id, e)
+            logger.debug("Automation exception for %s", user_id, exc_info=True)
+    logger.debug("Automation job finished: processed=%d skipped=%d failed=%d", processed, skipped, failed)
 
 
 def _get_user_creds(user_id: str):
@@ -209,6 +237,11 @@ def app_ui(request: Request):
         )
     user_id = request.session.get("user_id")
     user_automation_enabled = get_user_automation_enabled(user_id) if user_id else True
+    # Explicit for template: only output "checked" when True (avoids type/truthiness issues)
+    automation_checked_attr = "checked" if user_automation_enabled else ""
+    # Header "Chat auto-reply" badge reflects user's workflow toggle (and server allows it)
+    toggles = get_user_workflow_toggles(user_id) if user_id else {}
+    chat_auto_reply_on = AUTOMATION_CHAT_AUTO_REPLY_ENABLED and toggles.get("chat_auto_reply", True)
     return templates.TemplateResponse(
         request,
         "index.html",
@@ -217,8 +250,9 @@ def app_ui(request: Request):
             "user_id": user_id,
             "automation_enabled": AUTOMATION_ENABLED,
             "user_automation_enabled": user_automation_enabled,
+            "automation_checked_attr": automation_checked_attr,
             "automation_interval": AUTOMATION_INTERVAL_MINUTES,
-            "chat_auto_reply": AUTOMATION_CHAT_AUTO_REPLY_ENABLED,
+            "chat_auto_reply": chat_auto_reply_on,
         },
     )
 
@@ -364,7 +398,7 @@ def get_oshaani_key_status(user_id: Annotated[str, Depends(get_current_user)]):
     key = get_user_oshaani_key(user_id)
     return {
         "set": bool(key),
-        "hint": "Using your key" if key else "Using default key from server config",
+        "hint": "User personal key enabled" if key else "Using default key from server config",
     }
 
 
@@ -376,7 +410,13 @@ def save_oshaani_key(
     """Save or clear the user's Oshaani API key. Body: {"oshaani_api_key": "..."} or {"oshaani_api_key": ""} to clear. Stored in your Google Drive."""
     if not isinstance(body, dict):
         body = {}
-    api_key = body.get("oshaani_api_key", "")
+    api_key = (body.get("oshaani_api_key") or "").strip()
+    if api_key:
+        try:
+            from services.oshaani_client import validate_oshaani_api_key
+            validate_oshaani_api_key(api_key)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
     try:
         set_user_oshaani_key(user_id, api_key)
     except RuntimeError as e:
@@ -384,7 +424,29 @@ def save_oshaani_key(
     except Exception as e:
         logger.exception("PUT /me/oshaani-key failed")
         raise HTTPException(status_code=500, detail=f"Failed to save to Drive: {e!s}")
-    return {"message": "Saved to your Google Drive." if (api_key or "").strip() else "Cleared. Using default key."}
+    return {"message": "Saved to your Google Drive." if api_key else "Cleared. Using default key."}
+
+
+@app.post("/me/oshaani-key/test")
+def test_oshaani_key(
+    user_id: Annotated[str, Depends(get_current_user)],
+    body: dict = Body(default={}, embed=False),
+):
+    """Test an Oshaani API key without saving. Body: {"oshaani_api_key": "..."} to test that key, or omit to test the user's saved key."""
+    from services.oshaani_client import validate_oshaani_api_key
+
+    if not isinstance(body, dict):
+        body = {}
+    api_key = (body.get("oshaani_api_key") or "").strip()
+    if not api_key:
+        api_key = get_user_oshaani_key(user_id) or ""
+        if not api_key:
+            raise HTTPException(status_code=400, detail="No key to test. Enter a key in the box above or save one first.")
+    try:
+        validate_oshaani_api_key(api_key)
+        return {"valid": True, "message": "Oshaani API key is valid and accepted by the server."}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @app.get("/me/workflow-toggles")
@@ -411,7 +473,11 @@ def save_workflow_toggles(
 @app.get("/me/automation")
 def get_automation_status(user_id: Annotated[str, Depends(get_current_user)]):
     """Return whether scheduled Run-all automation is on for this user."""
-    return {"enabled": get_user_automation_enabled(user_id)}
+    from fastapi.responses import JSONResponse
+    return JSONResponse(
+        content={"enabled": get_user_automation_enabled(user_id)},
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 @app.put("/me/automation")
@@ -422,9 +488,16 @@ def set_automation_status(
     """Turn scheduled Run-all automation on or off for this user. Body: { \"enabled\": true|false }."""
     if not isinstance(body, dict):
         body = {}
-    enabled = body.get("enabled", True)
+    raw = body.get("enabled", True)
+    # Normalize: accept bool, "true"/"false", 1/0
+    if isinstance(raw, bool):
+        enabled = raw
+    elif isinstance(raw, str):
+        enabled = raw.strip().lower() in ("true", "1", "on", "yes")
+    else:
+        enabled = bool(raw)
     try:
-        set_user_automation_enabled(user_id, bool(enabled))
+        set_user_automation_enabled(user_id, enabled)
         return {"enabled": get_user_automation_enabled(user_id)}
     except RuntimeError as e:
         raise HTTPException(status_code=503, detail=str(e))
@@ -652,6 +725,13 @@ def create_task(
     if not task:
         raise HTTPException(status_code=500, detail="Failed to create task")
     return task
+
+
+@app.get("/.well-known/appspecific/com.chrome.devtools.json")
+def chrome_devtools_well_known():
+    """Chrome DevTools probes this path; return empty so it does not 404."""
+    from fastapi.responses import JSONResponse
+    return JSONResponse(content={}, status_code=200)
 
 
 @app.get("/health")

@@ -61,10 +61,13 @@ class WorkflowOrchestrator:
         """
         Fetch emails, send to agent for summarization and draft replies.
         If create_tasks=True, prompts agent to output action items as 'TASK: title | notes'
-        and creates them in Google Tasks.
+        and creates them in the user's Google Tasks (list "Johny Sins").
         """
         task_instruction = (
-            " At the end, list any follow-up action items. For each, output a line: TASK: [title] | [notes]"
+            " At the end, list follow-up action items. For each item you want created in the user's Google Tasks, "
+            "output exactly one line in this format: TASK: [task title] | [optional notes]. "
+            "Example: TASK: Follow up with John on proposal | Send by Friday. "
+            "Only lines starting with TASK: will be created as Google Tasks for the user."
             if create_tasks
             else ""
         )

@@ -467,7 +467,8 @@ body {
   flex-shrink: 0;
 }
 
-.workflow-toggle {
+.workflow-toggle,
+.automation-toggle {
   position: absolute;
   opacity: 0;
   width: 0;
@@ -497,15 +498,18 @@ body {
   box-shadow: 0 1px 2px rgba(0,0,0,0.2);
 }
 
-.workflow-toggle:checked + .toggle-slider {
+.workflow-toggle:checked + .toggle-slider,
+.automation-toggle:checked + .toggle-slider {
   background: var(--accent);
 }
 
-.workflow-toggle:checked + .toggle-slider::after {
+.workflow-toggle:checked + .toggle-slider::after,
+.automation-toggle:checked + .toggle-slider::after {
   transform: translateX(1.25rem);
 }
 
-.workflow-toggle:focus-visible + .toggle-slider {
+.workflow-toggle:focus-visible + .toggle-slider,
+.automation-toggle:focus-visible + .toggle-slider {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
@@ -686,6 +690,11 @@ body {
   color: var(--text-muted);
 }
 
+.api-key-box .hint.status-key-set {
+  color: var(--accent);
+  font-weight: 500;
+}
+
 .api-key-box .key-input {
   width: 100%;
   max-width: 400px;
@@ -825,6 +834,12 @@ body {
 
 .modal-content .result-section { margin-bottom: 1.25rem; }
 .modal-content .result-section:last-of-type { margin-bottom: 0; }
+.modal-content .result-tasks-list {
+  margin: 0.5rem 0 0 0;
+  padding-left: 1.25rem;
+  line-height: 1.5;
+  color: var(--text);
+}
 .modal-content .result-heading {
   font-family: var(--font-head);
   font-size: 0.75rem;
@@ -853,6 +868,26 @@ body {
 .modal-content .result-raw { white-space: pre-wrap; word-break: break-word; margin: 0; font-size: 0.85rem; color: var(--text-muted); }
 .modal-content .result-copy { margin-top: 1rem; }
 .modal-content.error .result-text { color: var(--error); }
+
+.modal-content .result-error-wrap {
+  padding: 0.25rem 0;
+}
+.modal-content .result-error-heading {
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--error, #c00);
+  margin-bottom: 0.75rem;
+}
+.modal-content .result-error-detail {
+  color: var(--text);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  padding: 0.75rem;
+  background: var(--bg-elevated);
+  border-radius: var(--radius-sm);
+  border-left: 3px solid var(--error, #c00);
+}
 
 /* Run result – kept for fallback / inline (hidden when using modal) */
 .run-result {
