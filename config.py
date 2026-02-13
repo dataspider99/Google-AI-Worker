@@ -59,6 +59,8 @@ GOOGLE_SCOPES = [
     # Tasks - store action items from workflows
     "https://www.googleapis.com/auth/tasks",
     "https://www.googleapis.com/auth/tasks.readonly",
+    # Calendar - schedule events from email/chat when AI suggests
+    "https://www.googleapis.com/auth/calendar.events",
     # Workspace
     "https://www.googleapis.com/auth/drive.readonly",
     "https://www.googleapis.com/auth/drive.file",

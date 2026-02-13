@@ -564,17 +564,24 @@ def workflow_smart_inbox(
         description="Custom request for the agent",
     ),
     create_tasks: bool = Query(True, description="Create Google Tasks from action items in response"),
+    create_events: bool = Query(True, description="Create Google Calendar events when AI suggests a meeting/event"),
 ):
     """
     Run smart inbox workflow: fetch emails, send to Oshaani agent for summarization
-    and draft replies. Action items output as 'TASK: title | notes' are stored in Google Tasks.
+    and draft replies. TASK: lines create Google Tasks; EVENT: lines create Calendar events.
     """
     _check_default_key_limit(user_id)
     logger.info("Smart inbox workflow for %s", user_id)
     creds = _get_user_creds(user_id)
     orchestrator = _get_orchestrator_for_user(user_id)
     user_request = request or "Summarize my inbox and highlight urgent items. Suggest draft replies for the top 3 emails."
-    result = orchestrator.run_smart_inbox(creds, user_request=user_request, create_tasks=create_tasks, user_id=user_id)
+    result = orchestrator.run_smart_inbox(
+        creds,
+        user_request=user_request,
+        create_tasks=create_tasks,
+        create_events=create_events,
+        user_id=user_id,
+    )
     if not get_user_oshaani_key(user_id):
         increment_default_key_usage_today(user_id)
     return result

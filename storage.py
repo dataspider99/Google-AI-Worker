@@ -434,24 +434,43 @@ def set_user_automation_enabled(user_id: str, enabled: bool) -> None:
 # --- Default key daily usage (limit workflow runs when user has no Oshaani key) ---
 
 DEFAULT_KEY_USAGE_FILE = "default_key_daily_usage.json"
+# Keep only this many days of usage to avoid unbounded file/memory growth
+DEFAULT_KEY_USAGE_RETENTION_DAYS = 31
+
+
+def _prune_old_default_key_usage(data: dict[str, dict[str, int]]) -> dict[str, dict[str, int]]:
+    """Remove date keys older than DEFAULT_KEY_USAGE_RETENTION_DAYS to prevent unbounded growth."""
+    from datetime import datetime, timezone, timedelta
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=DEFAULT_KEY_USAGE_RETENTION_DAYS)).strftime("%Y-%m-%d")
+    out = {}
+    for user_id, dates in data.items():
+        if not isinstance(dates, dict):
+            continue
+        kept = {d: c for d, c in dates.items() if isinstance(d, str) and d >= cutoff}
+        if kept:
+            out[user_id] = kept
+    return out
 
 
 def _load_default_key_usage() -> dict[str, dict[str, int]]:
-    """Load { user_id: { "YYYY-MM-DD": count } } from DATA_DIR."""
+    """Load { user_id: { "YYYY-MM-DD": count } } from DATA_DIR. Prunes old dates to limit size."""
     path = DATA_DIR / DEFAULT_KEY_USAGE_FILE
     if not path.exists():
         return {}
     try:
         with open(path) as f:
-            return json.load(f)
+            data = json.load(f)
+        return _prune_old_default_key_usage(data)
     except (json.JSONDecodeError, OSError):
         return {}
 
 
 def _save_default_key_usage(data: dict[str, dict[str, int]]) -> None:
+    """Save usage; prunes old dates before writing to avoid unbounded file growth."""
     _ensure_data_dir()
+    pruned = _prune_old_default_key_usage(data)
     with open(DATA_DIR / DEFAULT_KEY_USAGE_FILE, "w") as f:
-        json.dump(data, f, indent=2)
+        json.dump(pruned, f, indent=2)
 
 
 def get_default_key_usage_today(user_id: str) -> int:

@@ -200,3 +200,9 @@ def get_tasks_service(creds: Credentials):
     """Build Google Tasks API service."""
     creds = refresh_credentials_if_needed(creds)
     return build("tasks", "v1", credentials=creds)
+
+
+def get_calendar_service(creds: Credentials):
+    """Build Google Calendar API service."""
+    creds = refresh_credentials_if_needed(creds)
+    return build("calendar", "v3", credentials=creds)

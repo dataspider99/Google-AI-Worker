@@ -23,6 +23,7 @@ from services.google_data import (
 )
 from services.oshaani_client import OshaaniClient
 from services.tasks_service import create_task as create_google_task
+from services.calendar_service import create_event as create_calendar_event, parse_datetime_for_calendar
 
 
 def _conversation_id_for_chat(user_id: str, space_name: str) -> str:
@@ -56,12 +57,15 @@ class WorkflowOrchestrator:
         max_emails: int = 15,
         conversation_id: Optional[str] = None,
         create_tasks: bool = True,
+        create_events: bool = True,
         user_id: Optional[str] = None,
     ) -> dict[str, Any]:
         """
         Fetch emails, send to agent for summarization and draft replies.
         If create_tasks=True, prompts agent to output action items as 'TASK: title | notes'
         and creates them in the user's Google Tasks (list "Johny Sins").
+        If create_events=True, prompts agent to output calendar events as 'EVENT: summary | start | end | description'
+        and creates them in the user's primary Google Calendar.
         """
         task_instruction = (
             " At the end, list follow-up action items. For each item you want created in the user's Google Tasks, "
@@ -71,7 +75,13 @@ class WorkflowOrchestrator:
             if create_tasks
             else ""
         )
-        full_request = user_request + task_instruction
+        event_instruction = (
+            " If an email or chat clearly requires scheduling a meeting or event, output exactly one line: "
+            "EVENT: [event title] | [start date/time] | [end date/time] | [optional description]. "
+            "Use date-time in format YYYY-MM-DD HH:MM (e.g. 2025-02-15 14:00) or date only YYYY-MM-DD for all-day. "
+            "Only output EVENT: when the user clearly needs a calendar invite (e.g. meeting request, call scheduled)."
+        )
+        full_request = user_request + task_instruction + event_instruction
 
         emails = fetch_emails(creds, max_results=max_emails)
         drive = fetch_drive_files(creds, max_results=5)
@@ -87,6 +97,10 @@ class WorkflowOrchestrator:
             created = self._create_tasks_from_response(creds, result.get("response", ""))
             if created:
                 result["tasks_created"] = created
+        if create_events:
+            events_created = self._create_events_from_response(creds, result.get("response", ""))
+            if events_created:
+                result["events_created"] = events_created
 
         return result
 
@@ -181,6 +195,33 @@ class WorkflowOrchestrator:
                 task = create_google_task(creds, title=title, notes=notes or None)
                 if task:
                     created.append(task)
+        return created
+
+    def _create_events_from_response(self, creds: Credentials, response: str) -> list[dict]:
+        """Parse EVENT: summary | start | end | description lines from agent response and create Google Calendar events."""
+        created = []
+        for line in (response or "").splitlines():
+            line = line.strip()
+            if not line.upper().startswith("EVENT:"):
+                continue
+            rest = line[6:].strip()
+            parts = [p.strip() for p in rest.split("|")]
+            if len(parts) < 3:
+                continue
+            summary = parts[0]
+            start_raw = parts[1]
+            end_raw = parts[2]
+            description = parts[3] if len(parts) > 3 else None
+            start_rfc = parse_datetime_for_calendar(start_raw)
+            end_rfc = parse_datetime_for_calendar(end_raw)
+            if not summary or not start_rfc or not end_rfc:
+                logger.debug("Skipping EVENT line (unparseable): %s", line[:80])
+                continue
+            event = create_calendar_event(
+                creds, summary=summary, start=start_rfc, end=end_rfc, description=description
+            )
+            if event:
+                created.append(event)
         return created
 
     def run_chat_assistant(

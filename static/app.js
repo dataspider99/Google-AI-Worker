@@ -256,6 +256,31 @@
       tasksSection.appendChild(tasksList);
       frag.appendChild(tasksSection);
     }
+    if (data.events_created && Array.isArray(data.events_created) && data.events_created.length > 0) {
+      var eventsSection = document.createElement('div');
+      eventsSection.className = 'result-section';
+      eventsSection.innerHTML = '<h4 class="result-heading">Calendar events created</h4>';
+      var eventsList = document.createElement('ul');
+      eventsList.className = 'result-tasks-list';
+      data.events_created.forEach(function (ev) {
+        var li = document.createElement('li');
+        var start = (ev.start && (ev.start.dateTime || ev.start.date)) || '';
+        var end = (ev.end && (ev.end.dateTime || ev.end.date)) || '';
+        li.textContent = (ev.summary || 'Event') + (start ? ' — ' + start + (end ? ' to ' + end : '') : '');
+        if (ev.htmlLink) {
+          var a = document.createElement('a');
+          a.href = ev.htmlLink;
+          a.target = '_blank';
+          a.rel = 'noopener noreferrer';
+          a.textContent = ' Open in Calendar';
+          a.className = 'result-calendar-link';
+          li.appendChild(a);
+        }
+        eventsList.appendChild(li);
+      });
+      eventsSection.appendChild(eventsList);
+      frag.appendChild(eventsSection);
+    }
     if (data.status) {
       var statusSection = document.createElement('div');
       statusSection.className = 'result-section';
@@ -303,7 +328,7 @@
       batchWrap.appendChild(batchDiv);
       frag.appendChild(batchWrap);
     }
-    var skip = { response: 1, status: 1, message: 1, workflows: 1, total: 1, spaces: 1, tasks_created: 1 };
+    var skip = { response: 1, status: 1, message: 1, workflows: 1, total: 1, spaces: 1, tasks_created: 1, events_created: 1 };
     var others = [];
     Object.keys(data).forEach(function (k) {
       if (skip[k]) return;
@@ -357,7 +382,8 @@
   var GSUITE_LINKS = {
     'smart-inbox': [
       { label: 'View in Gmail', url: 'https://mail.google.com/mail/' },
-      { label: 'View in Tasks', url: 'https://tasks.google.com/' }
+      { label: 'View in Tasks', url: 'https://tasks.google.com/' },
+      { label: 'View in Calendar', url: 'https://calendar.google.com/calendar/' }
     ],
     'first-email-draft': [
       { label: 'View in Gmail', url: 'https://mail.google.com/mail/' }
