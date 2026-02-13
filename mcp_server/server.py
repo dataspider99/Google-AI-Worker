@@ -165,28 +165,46 @@ def _handle_tools_list() -> dict:
     }
 
 
+# Tool names that use Oshaani and count against the default-key daily limit
+_MCP_WORKFLOW_TOOLS = {"smart_inbox", "first_email_draft", "document_intelligence", "chat_auto_reply", "run_all_workflows"}
+
+
 def _handle_tools_call(name: str, arguments: dict) -> dict:
     """Execute a tool with the current user's credentials."""
     user_id = get_current_mcp_user()
     creds = _get_creds(user_id)
 
-    from storage import get_user_oshaani_key
+    from storage import can_run_workflow_with_default_key, get_user_oshaani_key, increment_default_key_usage_today
     from services.google_data import fetch_chat_spaces
     from services.oshaani_client import OshaaniClient
     from services.orchestrator import WorkflowOrchestrator
 
     user_oshaani_key = get_user_oshaani_key(user_id)
+    if not user_oshaani_key and name in _MCP_WORKFLOW_TOOLS:
+        allowed, current, limit = can_run_workflow_with_default_key(user_id)
+        if not allowed:
+            return {
+                "content": [{
+                    "type": "text",
+                    "text": f"Daily limit ({limit} workflows) reached for the default key. Add your own Oshaani API key in the dashboard for unlimited runs. (Used {current}/{limit} today.)",
+                }],
+                "isError": True,
+            }
     orchestrator = WorkflowOrchestrator(oshaani_client=OshaaniClient(api_key=user_oshaani_key or None))
 
     if name == "smart_inbox":
         req = (arguments or {}).get("request") or "Summarize my inbox and highlight urgent items. Suggest draft replies for the top 3 emails."
         result = orchestrator.run_smart_inbox(creds, user_request=req, user_id=user_id)
+        if not user_oshaani_key:
+            increment_default_key_usage_today(user_id)
         return {"content": [{"type": "text", "text": str(result.get("response", result))}]}
 
     elif name == "first_email_draft":
         req = (arguments or {}).get("request")
         subj = (arguments or {}).get("subject")
         result = orchestrator.run_first_email_draft(creds, user_request=req, subject_filter=subj, user_id=user_id)
+        if not user_oshaani_key:
+            increment_default_key_usage_today(user_id)
         return {"content": [{"type": "text", "text": json.dumps(result, indent=2)}]}
 
     elif name == "chat_spaces":
@@ -196,6 +214,8 @@ def _handle_tools_call(name: str, arguments: dict) -> dict:
     elif name == "document_intelligence":
         req = (arguments or {}).get("request") or "What are the key documents in my Drive? Summarize recent activity."
         result = orchestrator.run_document_intelligence(creds, user_request=req, user_id=user_id)
+        if not user_oshaani_key:
+            increment_default_key_usage_today(user_id)
         return {"content": [{"type": "text", "text": str(result.get("response", result))}]}
 
     elif name == "chat_auto_reply":
@@ -205,12 +225,16 @@ def _handle_tools_call(name: str, arguments: dict) -> dict:
         from services.google_data import get_space_type
         space_type = get_space_type(creds, space_name)
         result = orchestrator.run_chat_auto_reply(creds, space_name, user_id=user_id, reply_to_latest=1, space_type=space_type)
+        if not user_oshaani_key:
+            increment_default_key_usage_today(user_id)
         return {"content": [{"type": "text", "text": json.dumps(result, indent=2)}]}
 
     elif name == "run_all_workflows":
         from services.automation import run_all_workflows_for_user
 
         result = run_all_workflows_for_user(user_id, creds, oshaani_api_key=user_oshaani_key)
+        if not user_oshaani_key:
+            increment_default_key_usage_today(user_id)
         return {"content": [{"type": "text", "text": json.dumps(result, indent=2)}]}
 
     elif name == "list_task_lists":

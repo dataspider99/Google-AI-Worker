@@ -429,3 +429,57 @@ def set_user_automation_enabled(user_id: str, enabled: bool) -> None:
             logger.warning("Could not sync automation_enabled to Drive for %s", user_id)
     except Exception as e:
         logger.warning("Drive sync for automation_enabled failed: %s", e)
+
+
+# --- Default key daily usage (limit workflow runs when user has no Oshaani key) ---
+
+DEFAULT_KEY_USAGE_FILE = "default_key_daily_usage.json"
+
+
+def _load_default_key_usage() -> dict[str, dict[str, int]]:
+    """Load { user_id: { "YYYY-MM-DD": count } } from DATA_DIR."""
+    path = DATA_DIR / DEFAULT_KEY_USAGE_FILE
+    if not path.exists():
+        return {}
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return {}
+
+
+def _save_default_key_usage(data: dict[str, dict[str, int]]) -> None:
+    _ensure_data_dir()
+    with open(DATA_DIR / DEFAULT_KEY_USAGE_FILE, "w") as f:
+        json.dump(data, f, indent=2)
+
+
+def get_default_key_usage_today(user_id: str) -> int:
+    """Return number of workflow runs today for this user when using default key."""
+    from datetime import datetime, timezone
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    data = _load_default_key_usage()
+    return (data.get(user_id) or {}).get(today, 0)
+
+
+def increment_default_key_usage_today(user_id: str) -> int:
+    """Increment today's usage for user; return new count."""
+    from datetime import datetime, timezone
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    data = _load_default_key_usage()
+    if user_id not in data:
+        data[user_id] = {}
+    data[user_id][today] = data[user_id].get(today, 0) + 1
+    _save_default_key_usage(data)
+    return data[user_id][today]
+
+
+def can_run_workflow_with_default_key(user_id: str) -> tuple[bool, int, int]:
+    """
+    Check if user can run a workflow when using the default Oshaani key.
+    Returns (allowed, current_count, limit).
+    """
+    from config import DEFAULT_KEY_WORKFLOW_LIMIT_PER_DAY
+    current = get_default_key_usage_today(user_id)
+    limit = DEFAULT_KEY_WORKFLOW_LIMIT_PER_DAY
+    return (current < limit, current, limit)

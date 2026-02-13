@@ -1,0 +1,41 @@
+# Johny Sins – systemd unit
+# Install: sudo cp systemd/johny-sins.service /etc/systemd/system/
+#         sudo systemctl daemon-reload
+#         sudo systemctl enable --now johny-sins
+# Logs:   journalctl -u johny-sins -f
+
+[Unit]
+Description=Johny Sins – AI workflows for Gmail, Chat & Drive
+Documentation=https://github.com/your-org/Johny-Sins
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ec2-user
+Group=ec2-user
+
+WorkingDirectory=/home/ec2-user/Johny-Sins
+
+# Load .env from project root (optional; - prefix = don't fail if missing)
+EnvironmentFile=-/home/ec2-user/Johny-Sins/.env
+Environment=ENVIRONMENT=production
+Environment=PORT=8002
+
+# Run uvicorn (use python3 -m so it works without venv in PATH)
+ExecStart=/usr/bin/python3 -m uvicorn main:app --host 127.0.0.1 --port 8002
+
+Restart=on-failure
+RestartSec=5
+
+# Security / resource limits (optional)
+NoNewPrivileges=true
+PrivateTmp=true
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=johny-sins
+
+[Install]
+WantedBy=multi-user.target

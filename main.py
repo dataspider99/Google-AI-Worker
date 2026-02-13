@@ -42,10 +42,13 @@ from config import (
 )
 from mcp_server.server import router as mcp_router
 from storage import (
+    can_run_workflow_with_default_key,
     generate_api_key,
+    get_default_key_usage_today,
     get_user_automation_enabled,
     get_user_oshaani_key,
     get_user_workflow_toggles,
+    increment_default_key_usage_today,
     load_credentials,
     list_users,
     save_credentials,
@@ -194,6 +197,18 @@ def _get_orchestrator_for_user(user_id: str) -> "WorkflowOrchestrator":
     return WorkflowOrchestrator(oshaani_client=client)
 
 
+def _check_default_key_limit(user_id: str) -> None:
+    """Raise 429 if user is on default Oshaani key and has reached the daily workflow limit."""
+    if get_user_oshaani_key(user_id):
+        return
+    allowed, current, limit = can_run_workflow_with_default_key(user_id)
+    if not allowed:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Daily limit ({limit} workflows) reached for the default key. Add your own Oshaani API key in the dashboard for unlimited runs.",
+        )
+
+
 @app.get("/")
 def root(request: Request):
     """Root: redirect browsers to /app (UI), return JSON for API."""
@@ -255,6 +270,30 @@ def app_ui(request: Request):
             "chat_auto_reply": chat_auto_reply_on,
         },
     )
+
+
+@app.get("/privacy")
+def privacy_page(request: Request):
+    """Serve the Privacy Policy page."""
+    if not templates:
+        from fastapi.responses import HTMLResponse
+        return HTMLResponse(
+            status_code=200,
+            content="<html><head><title>Privacy Policy</title></head><body><h1>Privacy Policy</h1><p><a href='/app'>Back to app</a></p></body></html>",
+        )
+    return templates.TemplateResponse(request, "privacy.html", {"request": request})
+
+
+@app.get("/terms")
+def terms_page(request: Request):
+    """Serve the Terms & Conditions page."""
+    if not templates:
+        from fastapi.responses import HTMLResponse
+        return HTMLResponse(
+            status_code=200,
+            content="<html><head><title>Terms & Conditions</title></head><body><h1>Terms & Conditions</h1><p><a href='/app'>Back to app</a></p></body></html>",
+        )
+    return templates.TemplateResponse(request, "terms.html", {"request": request})
 
 
 @app.get("/auth/google/auth/google")
@@ -402,6 +441,20 @@ def get_oshaani_key_status(user_id: Annotated[str, Depends(get_current_user)]):
     }
 
 
+@app.get("/me/default-key-usage")
+def get_default_key_usage(user_id: Annotated[str, Depends(get_current_user)]):
+    """Return today's workflow run count and limit when using default Oshaani key; used for UI."""
+    from config import DEFAULT_KEY_WORKFLOW_LIMIT_PER_DAY
+    if get_user_oshaani_key(user_id):
+        return {"using_default_key": False}
+    used = get_default_key_usage_today(user_id)
+    return {
+        "using_default_key": True,
+        "used_today": used,
+        "limit": DEFAULT_KEY_WORKFLOW_LIMIT_PER_DAY,
+    }
+
+
 @app.put("/me/oshaani-key")
 def save_oshaani_key(
     user_id: Annotated[str, Depends(get_current_user)],
@@ -516,11 +569,15 @@ def workflow_smart_inbox(
     Run smart inbox workflow: fetch emails, send to Oshaani agent for summarization
     and draft replies. Action items output as 'TASK: title | notes' are stored in Google Tasks.
     """
+    _check_default_key_limit(user_id)
     logger.info("Smart inbox workflow for %s", user_id)
     creds = _get_user_creds(user_id)
     orchestrator = _get_orchestrator_for_user(user_id)
     user_request = request or "Summarize my inbox and highlight urgent items. Suggest draft replies for the top 3 emails."
-    return orchestrator.run_smart_inbox(creds, user_request=user_request, create_tasks=create_tasks, user_id=user_id)
+    result = orchestrator.run_smart_inbox(creds, user_request=user_request, create_tasks=create_tasks, user_id=user_id)
+    if not get_user_oshaani_key(user_id):
+        increment_default_key_usage_today(user_id)
+    return result
 
 
 @app.post("/workflows/chat-assistant")
@@ -530,10 +587,14 @@ def workflow_chat_assistant(
     space_name: Optional[str] = Query(None),
 ):
     """Run chat assistant workflow: analyze Chat messages via Oshaani."""
+    _check_default_key_limit(user_id)
     logger.info("Chat assistant workflow for %s", user_id)
     creds = _get_user_creds(user_id)
     orchestrator = _get_orchestrator_for_user(user_id)
-    return orchestrator.run_chat_assistant(creds, request, space_name=space_name, user_id=user_id)
+    result = orchestrator.run_chat_assistant(creds, request, space_name=space_name, user_id=user_id)
+    if not get_user_oshaani_key(user_id):
+        increment_default_key_usage_today(user_id)
+    return result
 
 
 @app.post("/workflows/chat-auto-reply")
@@ -547,16 +608,20 @@ def workflow_chat_auto_reply(
     Auto-reply to Google Chat (one-to-one DMs only). Does not reply if last message is yours.
     Use GET /workflows/chat-spaces to list your spaces (filter by type=DIRECT_MESSAGE).
     """
+    _check_default_key_limit(user_id)
     logger.info("Chat auto-reply workflow for %s, space %s", user_id, space_name)
     from services.google_data import get_space_type
 
     creds = _get_user_creds(user_id)
     space_type = get_space_type(creds, space_name)
     orchestrator = _get_orchestrator_for_user(user_id)
-    return orchestrator.run_chat_auto_reply(
+    result = orchestrator.run_chat_auto_reply(
         creds, space_name, user_id=user_id, reply_to_latest=reply_to_latest,
         system_prompt=prompt, space_type=space_type
     )
+    if not get_user_oshaani_key(user_id):
+        increment_default_key_usage_today(user_id)
+    return result
 
 
 @app.post("/workflows/chat-auto-reply-batch")
@@ -567,6 +632,7 @@ def workflow_chat_auto_reply_batch(
     """Run chat auto-reply for the first N DM spaces (default 5). Returns results per space."""
     from services.google_data import fetch_chat_spaces, get_space_type
 
+    _check_default_key_limit(user_id)
     logger.info("Chat auto-reply batch for %s, limit=%d", user_id, limit)
     creds = _get_user_creds(user_id)
     orchestrator = _get_orchestrator_for_user(user_id)
@@ -584,6 +650,8 @@ def workflow_chat_auto_reply_batch(
         except Exception as e:
             logger.warning("Chat auto-reply failed for space %s: %s", space.get("name"), e)
             results.append({"space": space.get("displayName", space["name"]), "error": str(e)})
+    if not get_user_oshaani_key(user_id):
+        increment_default_key_usage_today(user_id)
     return {"total": len(results), "spaces": results}
 
 
@@ -610,11 +678,15 @@ def workflow_document_intelligence(
     request: Optional[str] = Query(None),
 ):
     """Run document intelligence: analyze Drive/Docs via Oshaani."""
+    _check_default_key_limit(user_id)
     logger.info("Document intelligence workflow for %s", user_id)
     creds = _get_user_creds(user_id)
     orchestrator = _get_orchestrator_for_user(user_id)
     user_request = request or "What are the key documents in my Drive? Summarize recent activity."
-    return orchestrator.run_document_intelligence(creds, user_request=user_request, user_id=user_id)
+    result = orchestrator.run_document_intelligence(creds, user_request=user_request, user_id=user_id)
+    if not get_user_oshaani_key(user_id):
+        increment_default_key_usage_today(user_id)
+    return result
 
 
 @app.post("/workflows/first-email-draft")
@@ -633,12 +705,16 @@ def workflow_first_email_draft(
     Read email from inbox, send to Oshaani for draft reply, create Gmail draft.
     Use subject param to target a specific email. The draft appears in Gmail Drafts.
     """
+    _check_default_key_limit(user_id)
     logger.info("First email draft workflow for %s (subject=%s)", user_id, subject)
     creds = _get_user_creds(user_id)
     orchestrator = _get_orchestrator_for_user(user_id)
-    return orchestrator.run_first_email_draft(
+    result = orchestrator.run_first_email_draft(
         creds, user_request=request, subject_filter=subject, user_id=user_id
     )
+    if not get_user_oshaani_key(user_id):
+        increment_default_key_usage_today(user_id)
+    return result
 
 
 @app.post("/workflows/custom")
@@ -650,10 +726,11 @@ def workflow_custom(
     include_drive: int = Query(10, ge=0, le=50),
 ):
     """Run a fully customizable workflow with your specified Google data."""
+    _check_default_key_limit(user_id)
     logger.info("Custom workflow for %s", user_id)
     creds = _get_user_creds(user_id)
     orchestrator = _get_orchestrator_for_user(user_id)
-    return orchestrator.run_custom(
+    result = orchestrator.run_custom(
         creds,
         request,
         include_emails=include_emails,
@@ -661,6 +738,9 @@ def workflow_custom(
         include_drive=include_drive,
         user_id=user_id,
     )
+    if not get_user_oshaani_key(user_id):
+        increment_default_key_usage_today(user_id)
+    return result
 
 
 @app.post("/workflows/run-all")
@@ -669,12 +749,13 @@ def run_all_workflows_now(user_id: Annotated[str, Depends(get_current_user)]):
     Manually trigger all workflows that are toggled on (smart inbox, document intelligence, chat auto-reply).
     Also runs automatically on schedule when automation is enabled.
     """
+    _check_default_key_limit(user_id)
     logger.info("Run-all workflow for %s", user_id)
     creds = _get_user_creds(user_id)
     from services.automation import run_all_workflows_for_user
 
     toggles = get_user_workflow_toggles(user_id)
-    return run_all_workflows_for_user(
+    result = run_all_workflows_for_user(
         user_id,
         creds,
         include_smart_inbox=toggles.get("smart_inbox", True),
@@ -682,6 +763,9 @@ def run_all_workflows_now(user_id: Annotated[str, Depends(get_current_user)]):
         include_chat_auto_reply=toggles.get("chat_auto_reply", True),
         oshaani_api_key=get_user_oshaani_key(user_id),
     )
+    if not get_user_oshaani_key(user_id):
+        increment_default_key_usage_today(user_id)
+    return result
 
 
 # --- Google Tasks ---

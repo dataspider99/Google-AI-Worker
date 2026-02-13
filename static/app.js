@@ -108,7 +108,7 @@
         const r = await fetch(url, { method: method, credentials: 'include' });
         const data = await r.json();
         if (r.ok) {
-          showResult(data, false);
+          showResult(data, false, workflow);
         } else {
           showResult(data, true);
         }
@@ -170,7 +170,7 @@
       const r = await fetch('/workflows/chat-auto-reply?space_name=' + encodeURIComponent(spaceName), { method: 'POST', credentials: 'include' });
       const data = await r.json();
       if (r.ok) {
-        showResult(data, false);
+        showResult(data, false, 'chat-auto-reply');
       } else {
         showResult(data, true);
       }
@@ -197,7 +197,7 @@
       const r = await fetch('/workflows/chat-auto-reply-batch?limit=' + limit, { method: 'POST', credentials: 'include' });
       const data = await r.json();
       if (r.ok) {
-        showResult(data, false);
+        showResult(data, false, 'chat-auto-reply-batch');
       } else {
         showResult(data, true);
       }
@@ -353,7 +353,60 @@
     return JSON.stringify(detail);
   }
 
-  function showResult(textOrData, isError) {
+  /** Links to open Gmail, Chat, Drive, Tasks based on workflow. */
+  var GSUITE_LINKS = {
+    'smart-inbox': [
+      { label: 'View in Gmail', url: 'https://mail.google.com/mail/' },
+      { label: 'View in Tasks', url: 'https://tasks.google.com/' }
+    ],
+    'first-email-draft': [
+      { label: 'View in Gmail', url: 'https://mail.google.com/mail/' }
+    ],
+    'document-intelligence': [
+      { label: 'View in Drive', url: 'https://drive.google.com/drive/' }
+    ],
+    'chat-auto-reply': [
+      { label: 'View in Chat', url: 'https://chat.google.com/' }
+    ],
+    'chat-auto-reply-batch': [
+      { label: 'View in Chat', url: 'https://chat.google.com/' }
+    ],
+    'chat-spaces': [
+      { label: 'View in Chat', url: 'https://chat.google.com/' }
+    ],
+    'run-all': [
+      { label: 'Gmail', url: 'https://mail.google.com/mail/' },
+      { label: 'Chat', url: 'https://chat.google.com/' },
+      { label: 'Drive', url: 'https://drive.google.com/drive/' },
+      { label: 'Tasks', url: 'https://tasks.google.com/' }
+    ]
+  };
+
+  function appendGsuiteButtons(container, workflow) {
+    var links = workflow && GSUITE_LINKS[workflow];
+    if (!links || links.length === 0) return;
+    var wrap = document.createElement('div');
+    wrap.className = 'result-gsuite-links';
+    var heading = document.createElement('div');
+    heading.className = 'result-gsuite-heading';
+    heading.textContent = 'Open in Google Workspace';
+    wrap.appendChild(heading);
+    var btnRow = document.createElement('div');
+    btnRow.className = 'result-gsuite-btns';
+    links.forEach(function (item) {
+      var a = document.createElement('a');
+      a.href = item.url;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      a.className = 'btn btn-secondary result-gsuite-btn';
+      a.textContent = item.label;
+      btnRow.appendChild(a);
+    });
+    wrap.appendChild(btnRow);
+    container.appendChild(wrap);
+  }
+
+  function showResult(textOrData, isError, workflow) {
     var target = modalContentEl || runResultEl;
     if (!target) return;
     if (modalLoadingEl) modalLoadingEl.style.display = 'none';
@@ -388,6 +441,7 @@
     }
     if (typeof textOrData === 'object' && textOrData !== null) {
       target.appendChild(formatResponse(textOrData));
+      appendGsuiteButtons(target, workflow);
       var copyBtn = document.createElement('button');
       copyBtn.type = 'button';
       copyBtn.className = 'btn btn-secondary result-copy';

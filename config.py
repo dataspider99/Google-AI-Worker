@@ -100,5 +100,8 @@ AUTOMATION_ENABLED = os.getenv("AUTOMATION_ENABLED", "true").lower() == "true"
 AUTOMATION_INTERVAL_MINUTES = int(os.getenv("AUTOMATION_INTERVAL_MINUTES", "30"))
 AUTOMATION_CHAT_AUTO_REPLY_ENABLED = os.getenv("AUTOMATION_CHAT_AUTO_REPLY_ENABLED", "true").lower() == "true"
 
+# Default key limit: max workflow runs per day when user has no Oshaani API key (manual/API only; scheduler is unlimited)
+DEFAULT_KEY_WORKFLOW_LIMIT_PER_DAY = int(os.getenv("DEFAULT_KEY_WORKFLOW_LIMIT_PER_DAY", "10"))
+
 # Logging (in production default to INFO; DEBUG only when not production)
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO" if PRODUCTION else "DEBUG")

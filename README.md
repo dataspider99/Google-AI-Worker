@@ -110,6 +110,8 @@ AUTOMATION_ENABLED=true
 AUTOMATION_INTERVAL_MINUTES=30
 # Set to false to disable auto-replies in Google Chat (stops new threads being created)
 AUTOMATION_CHAT_AUTO_REPLY_ENABLED=true
+# Max workflow runs per day when using server default Oshaani key (manual/API only; scheduler unlimited)
+DEFAULT_KEY_WORKFLOW_LIMIT_PER_DAY=10
 LOG_LEVEL=INFO
 ```
 
