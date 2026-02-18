@@ -17,7 +17,6 @@ def run_all_workflows_for_user(
     user_id: str,
     creds: Credentials,
     include_smart_inbox: bool = True,
-    include_document_intelligence: bool = True,
     include_chat_auto_reply: bool = True,
     chat_spaces_limit: int = 10,
     oshaani_api_key: Optional[str] = None,
@@ -25,10 +24,11 @@ def run_all_workflows_for_user(
     """
     Run all enabled workflows for a user. Returns aggregated results.
     Uses oshaani_api_key if provided, else default from env.
+    Document intelligence is not included in Run all; run it separately.
     """
-    logger.debug("run_all_workflows_for_user entry: user_id=%s include_smart_inbox=%s include_document_intelligence=%s "
+    logger.debug("run_all_workflows_for_user entry: user_id=%s include_smart_inbox=%s "
                  "include_chat_auto_reply=%s chat_spaces_limit=%s", user_id, include_smart_inbox,
-                 include_document_intelligence, include_chat_auto_reply, chat_spaces_limit)
+                 include_chat_auto_reply, chat_spaces_limit)
     client = OshaaniClient(api_key=oshaani_api_key or None)
     orchestrator = WorkflowOrchestrator(oshaani_client=client)
     results = {"user_id": user_id, "workflows": {}, "errors": []}
@@ -54,24 +54,7 @@ def run_all_workflows_for_user(
             results["errors"].append(f"smart_inbox: {e}")
             logger.debug("User %s: smart_inbox error: %s", user_id, e)
 
-    # 2. Document Intelligence
-    if include_document_intelligence:
-        try:
-            logger.debug("User %s: starting workflow document_intelligence", user_id)
-            r = orchestrator.run_document_intelligence(
-                creds,
-                user_request="What are the key documents in my Drive? Summarize recent activity.",
-                user_id=user_id,
-            )
-            results["workflows"]["document_intelligence"] = {"status": "ok", "response_preview": str(r.get("response", ""))[:200]}
-            logger.debug("User %s: document_intelligence completed", user_id)
-        except Exception as e:
-            logger.exception("Document intelligence failed for %s", user_id)
-            results["workflows"]["document_intelligence"] = {"status": "error", "error": str(e)}
-            results["errors"].append(f"document_intelligence: {e}")
-            logger.debug("User %s: document_intelligence error: %s", user_id, e)
-
-    # 3. Chat Auto-Reply (one-to-one DMs only)
+    # 2. Chat Auto-Reply (one-to-one DMs only)
     if include_chat_auto_reply:
         try:
             logger.debug("User %s: starting workflow chat_auto_reply (fetching spaces)", user_id)

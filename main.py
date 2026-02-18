@@ -37,6 +37,7 @@ from config import (
     AUTOMATION_INTERVAL_MINUTES,
     CORS_ORIGINS,
     DATA_DIR,
+    ENABLE_DOCS,
     PRODUCTION,
     SECRET_KEY,
 )
@@ -61,8 +62,8 @@ app = FastAPI(
     title="Johny Sins",
     description="Multi-user app: access Google data via OAuth and integrate with Oshaani AI agents.",
     version="0.2.0",
-    docs_url="/docs" if not PRODUCTION else None,
-    redoc_url="/redoc" if not PRODUCTION else None,
+    docs_url="/docs" if ENABLE_DOCS else None,
+    redoc_url="/redoc" if ENABLE_DOCS else None,
 )
 
 
@@ -155,16 +156,14 @@ def _run_automation_for_all_users():
             creds_obj = dict_to_credentials(cred_data)
             toggles = get_user_workflow_toggles(user_id)
             include_si = toggles.get("smart_inbox", True)
-            include_di = toggles.get("document_intelligence", True)
             include_car = toggles.get("chat_auto_reply", True) and include_chat
             user_key = get_user_oshaani_key(user_id)
-            logger.debug("User %s: toggles smart_inbox=%s document_intelligence=%s chat_auto_reply=%s (include_chat=%s), oshaani_key_set=%s",
-                         user_id, include_si, include_di, include_car, include_chat, bool(user_key))
+            logger.debug("User %s: toggles smart_inbox=%s chat_auto_reply=%s (include_chat=%s), oshaani_key_set=%s",
+                         user_id, include_si, include_car, include_chat, bool(user_key))
             result = run_all_workflows_for_user(
                 user_id,
                 creds_obj,
                 include_smart_inbox=include_si,
-                include_document_intelligence=include_di,
                 include_chat_auto_reply=include_car,
                 oshaani_api_key=user_key,
             )
@@ -268,6 +267,8 @@ def app_ui(request: Request):
             "automation_checked_attr": automation_checked_attr,
             "automation_interval": AUTOMATION_INTERVAL_MINUTES,
             "chat_auto_reply": chat_auto_reply_on,
+            "canonical_url": f"{APP_ORIGIN}/app",
+            "app_origin": APP_ORIGIN,
         },
     )
 
@@ -753,8 +754,8 @@ def workflow_custom(
 @app.post("/workflows/run-all")
 def run_all_workflows_now(user_id: Annotated[str, Depends(get_current_user)]):
     """
-    Manually trigger all workflows that are toggled on (smart inbox, document intelligence, chat auto-reply).
-    Also runs automatically on schedule when automation is enabled.
+    Manually trigger all workflows that are toggled on (smart inbox, chat auto-reply).
+    Document intelligence is not included; run it separately. Also runs on schedule when automation is enabled.
     """
     _check_default_key_limit(user_id)
     logger.info("Run-all workflow for %s", user_id)
@@ -766,7 +767,6 @@ def run_all_workflows_now(user_id: Annotated[str, Depends(get_current_user)]):
         user_id,
         creds,
         include_smart_inbox=toggles.get("smart_inbox", True),
-        include_document_intelligence=toggles.get("document_intelligence", True),
         include_chat_auto_reply=toggles.get("chat_auto_reply", True),
         oshaani_api_key=get_user_oshaani_key(user_id),
     )

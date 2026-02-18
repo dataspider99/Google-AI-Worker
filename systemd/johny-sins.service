@@ -17,13 +17,16 @@ Group=ec2-user
 
 WorkingDirectory=/home/ec2-user/Johny-Sins
 
-# Load .env from project root (optional; - prefix = don't fail if missing)
+# Load .env from project root and auth (optional; - prefix = don't fail if missing)
 EnvironmentFile=-/home/ec2-user/Johny-Sins/.env
+EnvironmentFile=-/home/ec2-user/Johny-Sins/auth/.env
 Environment=ENVIRONMENT=production
 Environment=PORT=8002
+# Set ENABLE_DOCS=true in .env or here to serve /docs and /redoc in production
+Environment=ENABLE_DOCS=true
 
-# Run uvicorn (use python3 -m so it works without venv in PATH)
-ExecStart=/usr/bin/python3 -m uvicorn main:app --host 127.0.0.1 --port 8002
+# Run uvicorn from project venv
+ExecStart=/home/ec2-user/Johny-Sins/venv/bin/uvicorn main:app --host 127.0.0.1 --port 8002
 
 Restart=on-failure
 RestartSec=5

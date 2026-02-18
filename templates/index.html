@@ -1,6 +1,14 @@
 {% extends "base.html" %}
 {% block title %}Johny Sins – AI workflows for Gmail & Chat{% endblock %}
 
+{% block extra_head %}
+{% if not user_id and canonical_url is defined %}
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"WebApplication","name":"Johny Sins","url":"{{ canonical_url }}","description":"AI-powered workflows for Gmail, Google Chat, and Drive. Summarize inbox, draft replies, auto-reply in Chat, and automate with Oshaani agents. Sign in with Google.","applicationCategory":"ProductivityApplication","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"}}
+</script>
+{% endif %}
+{% endblock %}
+
 {% block body %}
   {% if user_id %}
   <div class="layout dashboard-app">
@@ -10,6 +18,7 @@
         <a href="/app" class="active">Dashboard</a>
         <a href="/docs" target="_blank" rel="noopener">API Docs</a>
         <a href="/health" target="_blank" rel="noopener">Health</a>
+        <a href="https://www.youtube.com/watch?v=J6G7neOlAms" target="_blank" rel="noopener">Oshaani tutorial</a>
         <a href="/privacy">Privacy</a>
         <a href="/terms">Terms</a>
       </nav>
@@ -86,14 +95,8 @@
           </div>
         </div>
         <div class="card dashboard-card" data-workflow-id="document_intelligence">
-          <div class="card-header-row">
-            <h3>Document intelligence</h3>
-            <label class="toggle-wrap" title="Include in Run all and automation">
-              <input type="checkbox" class="workflow-toggle" data-workflow-id="document_intelligence" checked />
-              <span class="toggle-slider"></span>
-            </label>
-          </div>
-          <p class="desc">Summarize Drive activity and key documents.</p>
+          <h3>Document intelligence</h3>
+          <p class="desc">Summarize Drive activity and key documents. Not included in Run all; run it separately.</p>
           <div class="actions">
             <button type="button" class="btn btn-primary" data-workflow="document-intelligence">Run</button>
           </div>
@@ -119,12 +122,25 @@
         </div>
         <div class="card dashboard-card">
           <h3>Run all</h3>
-          <p class="desc">Trigger all workflows that are toggled On above. Use the Automation toggle in the status bar to run on a schedule; use the button below to run now.</p>
+          <p class="desc">Trigger Smart Inbox and Chat auto-reply (whichever are toggled On). Use the Automation toggle in the status bar to run on a schedule; use the button below to run now.</p>
           <div class="actions">
             <button type="button" class="btn btn-primary" data-workflow="run-all">Run all</button>
           </div>
         </div>
       </div>
+
+      <section class="dashboard-info" aria-label="Help and information">
+        <h2 class="dashboard-info-heading">Help &amp; information</h2>
+        <div class="video-embed-wrap" style="margin-bottom: 1.25rem;">
+          <iframe class="video-embed" src="https://www.youtube.com/embed/J6G7neOlAms" title="Oshaani tutorial – step-by-step walkthrough" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
+        </div>
+        <p class="dashboard-info-video-caption">Oshaani tutorial — step-by-step walkthrough for creating an Agent Key and using Oshaani with Johny Sins. <a href="https://www.youtube.com/watch?v=J6G7neOlAms" target="_blank" rel="noopener">Watch on YouTube</a></p>
+        <ul class="dashboard-info-list">
+          <li>Add your <strong>Oshaani API key</strong> above for unlimited runs; without it you get 10 workflow runs per day (server key). Key is stored in your Google Drive (folder “Johny Sins”).</li>
+          <li><a href="https://oshaani.com" target="_blank" rel="noopener">Oshaani.com</a> — sign up, create an agent, then copy the Agent API key from API Access into the box above.</li>
+          <li><a href="/docs" target="_blank" rel="noopener">API docs</a> · <a href="/sop" rel="noopener">SOP</a> · <a href="/health" target="_blank" rel="noopener">Health</a> · <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a></li>
+        </ul>
+      </section>
 
       <!-- Response modal: loading + result -->
       <div id="response-modal" class="modal" aria-hidden="true">
@@ -146,12 +162,62 @@
     </main>
   </div>
   {% else %}
-  <div class="landing-page">
+  <main class="landing-page" id="main-content">
     <header class="landing-hero">
       <h1 class="logo">Johny Sins</h1>
       <p class="tagline">AI-powered workflows for Gmail, Google Chat, and Drive. Summarize inbox, draft replies, auto-reply in Chat, and automate with <a href="https://oshaani.com" target="_blank" rel="noopener">Oshaani</a> agents.</p>
+      <div class="hero-capabilities">
+        <p class="hero-capabilities-label">Tool capabilities:</p>
+        <ul class="hero-capabilities-list">
+          <li>Smart Inbox — summarize Gmail, suggest replies, create Tasks</li>
+          <li>First email draft — AI drafts replies as Gmail drafts</li>
+          <li>Document intelligence — summarize Drive, Docs, Sheets (run separately, not in Run all)</li>
+          <li>Chat assistant &amp; auto-reply — analyze or reply in Google Chat</li>
+          <li>Run all &amp; automation — Smart Inbox and Chat auto-reply, one click or on a schedule</li>
+          <li>API &amp; MCP — scripts, Cursor, Claude Desktop</li>
+        </ul>
+        <a href="#capabilities" class="hero-capabilities-link">See full details ↓</a>
+      </div>
       <a href="/auth/google" class="btn-primary">Sign in with Google</a>
     </header>
+
+    <section class="home-section capabilities-section" id="capabilities">
+      <h2>What you can do</h2>
+      <p class="capabilities-intro">Connect your Google workspace once; then run AI workflows from the dashboard, on a schedule, or via API.</p>
+      <ul class="capabilities-grid">
+        <li class="capability-item">
+          <span class="capability-icon" aria-hidden="true">📬</span>
+          <h3>Smart Inbox</h3>
+          <p>Get a daily summary of your Gmail inbox: urgency, suggested replies, and action items. Tasks are created automatically in Google Tasks (list “Johny Sins”).</p>
+        </li>
+        <li class="capability-item">
+          <span class="capability-icon" aria-hidden="true">✉️</span>
+          <h3>First email draft</h3>
+          <p>AI drafts a reply to the first or chosen email thread. A <strong>Gmail draft</strong> is created so you review and send from Gmail—we never send email for you.</p>
+        </li>
+        <li class="capability-item">
+          <span class="capability-icon" aria-hidden="true">📁</span>
+          <h3>Document intelligence</h3>
+          <p>Summarize recent Google Drive activity and key Docs/Sheets. Use it for context in custom workflows or to stay on top of shared files.</p>
+        </li>
+        <li class="capability-item">
+          <span class="capability-icon" aria-hidden="true">💬</span>
+          <h3>Chat assistant &amp; auto-reply</h3>
+          <p>Analyze Google Chat spaces or auto-reply in DMs using your Oshaani agent. Pick a space and run once, or let automation handle replies on a schedule.</p>
+        </li>
+        <li class="capability-item">
+          <span class="capability-icon" aria-hidden="true">🔄</span>
+          <h3>Run all &amp; automation</h3>
+          <p>Run all enabled workflows in one click, or turn <strong>Automation</strong> on to run them on a schedule (e.g. every 30 minutes) for all your workflows.</p>
+        </li>
+        <li class="capability-item">
+          <span class="capability-icon" aria-hidden="true">🔑</span>
+          <h3>API &amp; MCP</h3>
+          <p>Generate an API key and call workflows from scripts, cron, or <strong>MCP</strong> clients (Cursor, Claude Desktop). Use <code>Authorization: Bearer &lt;key&gt;</code>.</p>
+        </li>
+      </ul>
+      <p class="home-note">Your data stays in your Google account. We use OAuth (no password); credentials and settings are stored in a private “Johny Sins” folder in your Drive.</p>
+    </section>
 
     <section class="home-section" id="how-it-works">
       <h2>How to use it</h2>
@@ -166,6 +232,10 @@
     <section class="home-section" id="oshaani-key">
       <h2>How to create an Agent Key in Oshaani</h2>
       <p>Workflows use Oshaani.com AI agents. You can use the shared server key (with limits) or your own for unlimited runs.</p>
+      <p class="home-note" style="margin-bottom: 0.75rem;">📺 Watch the Oshaani tutorial below, or <a href="https://www.youtube.com/watch?v=J6G7neOlAms" target="_blank" rel="noopener">open it on YouTube</a>.</p>
+      <div class="video-embed-wrap home-video-wrap">
+        <iframe class="video-embed" src="https://www.youtube.com/embed/J6G7neOlAms" title="Oshaani tutorial – step-by-step walkthrough" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
+      </div>
       <ol class="home-steps">
         <li>Go to <a href="https://oshaani.com" target="_blank" rel="noopener">oshaani.com</a> and sign up or log in.</li>
         <li>Create an agent and train it for your use case (e.g. email summaries, reply drafting).</li>
@@ -198,9 +268,9 @@
     <footer class="landing-footer">
       <a href="/auth/google" class="btn-primary">Sign in with Google</a>
       <p class="meta">
-        <a href="/docs" target="_blank" rel="noopener">API docs</a> · <a href="/health" target="_blank" rel="noopener">Health</a> · <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a> · <a href="https://oshaani.com" target="_blank" rel="noopener">Oshaani</a>
+        <a href="/docs" target="_blank" rel="noopener">API docs</a> · <a href="/sop" rel="noopener">SOP</a> · <a href="/health" target="_blank" rel="noopener">Health</a> · <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a> · <a href="https://oshaani.com" target="_blank" rel="noopener">Oshaani</a> · <a href="https://www.youtube.com/watch?v=J6G7neOlAms" target="_blank" rel="noopener">Oshaani tutorial</a>
       </p>
     </footer>
-  </div>
+  </main>
   {% endif %}
 {% endblock %}

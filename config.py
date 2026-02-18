@@ -76,6 +76,8 @@ OSHAANI_AGENT_API_KEY = os.getenv("OSHAANI_AGENT_API_KEY", "")
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development").lower()
 PRODUCTION = ENVIRONMENT == "production"
 DEBUG = not PRODUCTION and os.getenv("DEBUG", "").lower() in ("1", "true", "yes")
+# Enable /docs and /redoc in production when set to true (default: off in production)
+ENABLE_DOCS = os.getenv("ENABLE_DOCS", "").lower() in ("1", "true", "yes") or not PRODUCTION
 
 SECRET_KEY = os.getenv("SECRET_KEY", "change-me-in-production")
 if PRODUCTION and (not SECRET_KEY or SECRET_KEY == "change-me-in-production"):

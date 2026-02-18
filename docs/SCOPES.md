@@ -87,3 +87,29 @@ The app requests the scopes defined in `config.GOOGLE_SCOPES`. Below is how each
 - **Action items (TASK: …):** Tasks create + Tasks list read
 
 Scopes not yet used in code (e.g. `gmail.send`, `gmail.modify`, `gmail.labels`) are requested so the app can support sending email, labels, or other features without asking users to re-authorize later.
+
+---
+
+## Minimum scopes (least permission)
+
+To run without issues, the app only needs the scopes that are **actually used** in code. The list below is the minimal set; removing any of these can break login, storage, or a feature.
+
+| Scope | Purpose |
+|-------|--------|
+| `openid` | Required for OpenID Connect / userinfo. |
+| `userinfo.email` | User identity after login (session `user_id`). |
+| `userinfo.profile` | User identity (profile with email). |
+| `gmail.readonly` | List and read emails (Smart Inbox, First email draft). |
+| `gmail.compose` | Create Gmail drafts (First email draft). |
+| `chat.spaces.readonly` | List Chat spaces (pick DM, Chat assistant). |
+| `chat.messages.readonly` | Read Chat messages (Smart Inbox, auto-reply context). |
+| `chat.messages` | Send Chat replies (auto-reply, Chat assistant). |
+| `tasks.readonly` | List task lists and tasks. |
+| `tasks` | Create “Johny Sins” list and create tasks (TASK: …). |
+| `drive.file` | App-created files only: “Johny Sins” folder and `user_data.json`. |
+| `drive.readonly` | List/read Drive files (Document intelligence). |
+| `documents.readonly` | Read Google Docs content. |
+| `spreadsheets.readonly` | Read Google Sheets data. |
+| `calendar.events` | Create Calendar events (EVENT: … from workflows). |
+
+**Not required for current features:** `gmail.send`, `gmail.insert`, `gmail.modify`, `gmail.labels`, `chat.spaces`, `chat.memberships.readonly`, `chat.memberships`, `chat.messages.reactions.readonly`, `chat.messages.reactions`. These can be omitted if you want the least permission set; add them back if you add features that need them.
