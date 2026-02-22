@@ -72,7 +72,7 @@
           <div class="card-header-row">
             <h3>Smart Inbox</h3>
             <label class="toggle-wrap" title="Include in Run all and automation">
-              <input type="checkbox" class="workflow-toggle" data-workflow-id="smart_inbox" checked />
+              <input type="checkbox" class="workflow-toggle" data-workflow-id="smart_inbox" />
               <span class="toggle-slider"></span>
             </label>
           </div>
@@ -85,7 +85,7 @@
           <div class="card-header-row">
             <h3>First email draft</h3>
             <label class="toggle-wrap" title="Workflow enabled">
-              <input type="checkbox" class="workflow-toggle" data-workflow-id="first_email_draft" checked />
+              <input type="checkbox" class="workflow-toggle" data-workflow-id="first_email_draft" />
               <span class="toggle-slider"></span>
             </label>
           </div>
@@ -105,7 +105,7 @@
           <div class="card-header-row">
             <h3>Chat auto-reply</h3>
             <label class="toggle-wrap" title="Include in Run all and automation">
-              <input type="checkbox" class="workflow-toggle" data-workflow-id="chat_auto_reply" checked />
+              <input type="checkbox" class="workflow-toggle" data-workflow-id="chat_auto_reply" />
               <span class="toggle-slider"></span>
             </label>
           </div>
@@ -125,6 +125,13 @@
           <p class="desc">Trigger Smart Inbox and Chat auto-reply (whichever are toggled On). Use the Automation toggle in the status bar to run on a schedule; use the button below to run now.</p>
           <div class="actions">
             <button type="button" class="btn btn-primary" data-workflow="run-all">Run all</button>
+          </div>
+        </div>
+        <div class="card dashboard-card">
+          <h3>Google Tasks</h3>
+          <p class="desc">View your tasks from Google Tasks API. Show loads all task lists and tasks (including completed) from your Google account.</p>
+          <div class="actions">
+            <button type="button" class="btn btn-primary" id="show-google-tasks-btn" data-action="show-google-tasks">Show</button>
           </div>
         </div>
       </div>

@@ -84,6 +84,67 @@
     });
   }
 
+  /** When Show is clicked: call GET /tasks/lists to get all task lists, then fetch tasks for each list and display. */
+  function handleShowGoogleTasks() {
+    showModalLoading('Loading tasks…');
+    (async function () {
+      try {
+        // Step 1: Call /tasks/lists API to get all task lists (uses OAuth token)
+        var listsRes = await fetch('/tasks/lists', { credentials: 'include' });
+        var listsData;
+        try {
+          listsData = await listsRes.json();
+        } catch (parseErr) {
+          showResult({ detail: 'Invalid response from server. Please try again.' }, true);
+          return;
+        }
+        if (!listsRes.ok) {
+          showResult(listsData || { detail: 'Failed to load task lists.' }, true);
+          return;
+        }
+        var taskLists = listsData.task_lists || [];
+        if (taskLists.length === 0) {
+          if (modalTitleEl) modalTitleEl.textContent = 'Google Tasks';
+          showResult('No task lists found. Create tasks at tasks.google.com or run Smart Inbox to create action items.', false, 'google-tasks');
+          return;
+        }
+        // Step 2: For each list, call /tasks/lists/{id}/tasks to get all tasks
+        var tasksByList = {};
+        for (var i = 0; i < taskLists.length; i++) {
+          var list = taskLists[i];
+          var tasksRes = await fetch('/tasks/lists/' + encodeURIComponent(list.id) + '/tasks?show_completed=true&max_results=0', { credentials: 'include' });
+          var tasksData = {};
+          try {
+            tasksData = await tasksRes.json();
+          } catch (parseErr) {
+            tasksByList[list.id] = [];
+            continue;
+          }
+          if (tasksRes.ok && Array.isArray(tasksData.tasks)) {
+            tasksByList[list.id] = tasksData.tasks;
+          } else {
+            tasksByList[list.id] = [];
+          }
+        }
+        if (modalTitleEl) modalTitleEl.textContent = 'Google Tasks';
+        showResult({ task_lists: taskLists, tasks_by_list: tasksByList, _source: 'Google Tasks API' }, false, 'google-tasks');
+      } catch (e) {
+        showResult({ detail: e.message || 'Network or unexpected error.' }, true);
+      }
+    })();
+  }
+
+  document.addEventListener('click', function (e) {
+    var target = e.target;
+    if (!target) return;
+    var el = (target.closest && target.closest('[data-action="show-google-tasks"]')) || (target.id === 'show-google-tasks-btn' ? target : null);
+    if (el) {
+      e.preventDefault();
+      e.stopPropagation();
+      handleShowGoogleTasks();
+    }
+  }, true);
+
   document.querySelectorAll('[data-workflow]').forEach(function (btn) {
     btn.addEventListener('click', async function () {
       const workflow = this.getAttribute('data-workflow');
@@ -306,6 +367,46 @@
       wrap.appendChild(wfDiv);
       frag.appendChild(wrap);
     }
+    if (data.task_lists && Array.isArray(data.task_lists) && data.tasks_by_list && typeof data.tasks_by_list === 'object') {
+      var totalTasks = 0;
+      data.task_lists.forEach(function (list) {
+        var tasks = data.tasks_by_list[list.id];
+        if (Array.isArray(tasks)) totalTasks += tasks.length;
+      });
+      var summarySection = document.createElement('div');
+      summarySection.className = 'result-section';
+      var summaryP = document.createElement('p');
+      summaryP.className = 'result-text';
+      summaryP.style.marginBottom = '0.5rem';
+      summaryP.textContent = 'Tasks from Google Tasks API — ' + totalTasks + ' total in ' + data.task_lists.length + ' list' + (data.task_lists.length === 1 ? '' : 's');
+      summarySection.appendChild(summaryP);
+      frag.appendChild(summarySection);
+      data.task_lists.forEach(function (list) {
+        var listId = list.id;
+        var listTitle = list.title || 'Tasks';
+        var tasks = data.tasks_by_list[listId];
+        if (!Array.isArray(tasks)) return;
+        var section = document.createElement('div');
+        section.className = 'result-section';
+        var h = document.createElement('h4');
+        h.className = 'result-heading';
+        h.textContent = listTitle + ' (' + tasks.length + ')';
+        section.appendChild(h);
+        var ul = document.createElement('ul');
+        ul.className = 'result-tasks-list';
+        tasks.forEach(function (t) {
+          var li = document.createElement('li');
+          var title = t.title || '(No title)';
+          var notes = t.notes ? ' — ' + t.notes : '';
+          var status = t.status === 'completed' ? ' ✓' : '';
+          var due = t.due ? ' (due: ' + t.due + ')' : '';
+          li.textContent = title + notes + due + status;
+          ul.appendChild(li);
+        });
+        section.appendChild(ul);
+        frag.appendChild(section);
+      });
+    }
     if (data.spaces && Array.isArray(data.spaces) && typeof data.total === 'number') {
       var batchDiv = document.createElement('div');
       batchDiv.className = 'result-workflows';
@@ -328,7 +429,19 @@
       batchWrap.appendChild(batchDiv);
       frag.appendChild(batchWrap);
     }
-    var skip = { response: 1, status: 1, message: 1, workflows: 1, total: 1, spaces: 1, tasks_created: 1, events_created: 1 };
+    if (data.drive_result_link) {
+      var driveSection = document.createElement('div');
+      driveSection.className = 'result-section result-drive-link';
+      var driveLink = document.createElement('a');
+      driveLink.href = data.drive_result_link;
+      driveLink.target = '_blank';
+      driveLink.rel = 'noopener noreferrer';
+      driveLink.className = 'btn btn-primary result-gsuite-btn';
+      driveLink.textContent = 'View result in Drive';
+      driveSection.appendChild(driveLink);
+      frag.appendChild(driveSection);
+    }
+    var skip = { response: 1, status: 1, message: 1, workflows: 1, total: 1, spaces: 1, tasks_created: 1, events_created: 1, task_lists: 1, tasks_by_list: 1, _source: 1, drive_result_link: 1 };
     var others = [];
     Object.keys(data).forEach(function (k) {
       if (skip[k]) return;
@@ -405,6 +518,9 @@
       { label: 'Chat', url: 'https://chat.google.com/' },
       { label: 'Drive', url: 'https://drive.google.com/drive/' },
       { label: 'Tasks', url: 'https://tasks.google.com/' }
+    ],
+    'google-tasks': [
+      { label: 'View in Tasks', url: 'https://tasks.google.com/' }
     ]
   };
 
@@ -432,9 +548,12 @@
     container.appendChild(wrap);
   }
 
+  var modalTitleEl = document.querySelector('.modal-title');
+
   function showResult(textOrData, isError, workflow) {
     var target = modalContentEl || runResultEl;
     if (!target) return;
+    if (modalTitleEl) modalTitleEl.textContent = 'Response';
     if (modalLoadingEl) modalLoadingEl.style.display = 'none';
     if (modalContentEl) modalContentEl.style.display = 'block';
     target.classList.toggle('error', isError);
@@ -594,7 +713,7 @@
       });
       updateChatAutoReplyBadge(toggles.chat_auto_reply !== false);
     } catch (e) {
-      // leave defaults (all checked)
+      // leave defaults (all off)
     }
   }
 

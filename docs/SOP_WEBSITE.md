@@ -1,6 +1,6 @@
 # Standard Operating Procedure (SOP): Website
 
-**Document:** SOP – Website (Johny Sins at jsins.oshaani.com)  
+**Document:** SOP – Website (Johny Sins at g.oshaani.com)  
 **Purpose:** Standard procedures for operating, maintaining, and troubleshooting the live website.  
 **Audience:** Operators, DevOps, and developers who maintain the site.
 
@@ -10,7 +10,7 @@
 
 | Item | Detail |
 |------|--------|
-| **Site URL** | https://jsins.oshaani.com |
+| **Site URL** | https://g.oshaani.com |
 | **App** | Johny Sins – multi-user FastAPI app; Google OAuth + Oshaani AI workflows (Gmail, Chat, Drive, Tasks, Calendar). |
 | **Stack** | Python 3.9+, FastAPI, uvicorn; systemd service; nginx reverse proxy; Let’s Encrypt SSL. |
 | **Server** | App runs as systemd unit `johny-sins` on **port 8002** (127.0.0.1). Nginx listens on 80/443 and proxies to 8002. |
@@ -20,12 +20,12 @@
 
 | URL | Purpose |
 |-----|--------|
-| https://jsins.oshaani.com | Home |
-| https://jsins.oshaani.com/app | Dashboard (sign in, workflows, API key) |
-| https://jsins.oshaani.com/auth/google | Sign in with Google |
-| https://jsins.oshaani.com/docs | API docs (Swagger UI) |
-| https://jsins.oshaani.com/redoc | API docs (ReDoc) |
-| https://jsins.oshaani.com/health | Health check |
+| https://g.oshaani.com | Home |
+| https://g.oshaani.com/app | Dashboard (sign in, workflows, API key) |
+| https://g.oshaani.com/auth/google | Sign in with Google |
+| https://g.oshaani.com/docs | API docs (Swagger UI) |
+| https://g.oshaani.com/redoc | API docs (ReDoc) |
+| https://g.oshaani.com/health | Health check |
 
 ---
 
@@ -35,11 +35,11 @@
 
 ```bash
 # From server
-curl -s -o /dev/null -w "%{http_code}" https://jsins.oshaani.com/health
+curl -s -o /dev/null -w "%{http_code}" https://g.oshaani.com/health
 # Expected: 200
 
 # Or in browser
-# Open https://jsins.oshaani.com/health → should show {"status":"ok"}
+# Open https://g.oshaani.com/health → should show {"status":"ok"}
 ```
 
 ### 2.2 Check service status
@@ -63,6 +63,8 @@ journalctl -u johny-sins -n 100 --no-pager
 # Logs since today
 journalctl -u johny-sins --since today --no-pager
 ```
+
+**Optional file logging:** Set `LOG_FILE` in `.env` (e.g. `LOG_FILE=logs/johny-sins.log` or `/var/log/johny-sins/app.log`) to also write logs to a file. Logs rotate at 10 MB and keep 3 backups (`LOG_FILE_MAX_BYTES`, `LOG_FILE_BACKUP_COUNT`).
 
 ### 2.4 Restart the application (after config or code change)
 
@@ -89,7 +91,7 @@ Do **not** reload if `nginx -t` fails (e.g. missing SSL certs).
 |------|----------|--------|
 | App env (OAuth, Oshaani, app URL) | `auth/.env` or project root `.env` | systemd loads both (see unit file). |
 | Systemd unit | `/etc/systemd/system/johny-sins.service` | Copied from repo `systemd/johny-sins.service`. |
-| Nginx site config | `/etc/nginx/conf.d/jsins.oshaani.com.conf` | Copied from repo `nginx/jsins.oshaani.com.conf` (or `.http-only.conf` for bootstrap). |
+| Nginx site config | `/etc/nginx/conf.d/g.oshaani.com.conf` | Copied from repo `nginx/g.oshaani.com.conf` (or `.http-only.conf` for bootstrap). |
 
 ### 3.2 Required environment variables (production)
 
@@ -99,8 +101,8 @@ Ensure these are set in `auth/.env` or project root `.env` (and that systemd loa
 |----------|---------|--------|
 | `GOOGLE_CLIENT_ID` | `xxx.apps.googleusercontent.com` | Google OAuth |
 | `GOOGLE_CLIENT_SECRET` | `xxx` | Google OAuth |
-| `GOOGLE_REDIRECT_URI` | `https://jsins.oshaani.com/auth/google/callback` | OAuth callback; must match Google Cloud Console |
-| `APP_BASE_URL` | `https://jsins.oshaani.com` | Base URL for redirects and links |
+| `GOOGLE_REDIRECT_URI` | `https://g.oshaani.com/auth/google/callback` | OAuth callback; must match Google Cloud Console |
+| `APP_BASE_URL` | `https://g.oshaani.com` | Base URL for redirects and links |
 | `SECRET_KEY` | Long random string | Session signing (e.g. `openssl rand -hex 32`) |
 | `ENVIRONMENT` | `production` | Enables production behavior |
 | `OSHAANI_AGENT_API_KEY` | (optional per user) | Default agent key; users can override in dashboard |
@@ -112,7 +114,7 @@ Optional for production:
 
 ### 3.3 Google Cloud Console
 
-- **Authorized redirect URIs** must include: `https://jsins.oshaani.com/auth/google/callback`.
+- **Authorized redirect URIs** must include: `https://g.oshaani.com/auth/google/callback`.
 - Required APIs: Gmail, Chat, Drive, Docs, Sheets, Tasks, People (userinfo). See README for full list.
 
 ---
@@ -140,7 +142,7 @@ sudo systemctl restart johny-sins
 ### 4.3 Update nginx config (after editing repo file)
 
 ```bash
-sudo cp /home/ec2-user/Johny-Sins/nginx/jsins.oshaani.com.conf /etc/nginx/conf.d/jsins.oshaani.com.conf
+sudo cp /home/ec2-user/Johny-Sins/nginx/g.oshaani.com.conf /etc/nginx/conf.d/g.oshaani.com.conf
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
@@ -184,9 +186,9 @@ sudo nginx -t && sudo systemctl reload nginx
 - **Cause:** Nginx config references Let’s Encrypt certs that don’t exist yet.
 - **Fix:** Use HTTP-only config first, then run certbot. See `nginx/README.md`:
   ```bash
-  sudo cp /home/ec2-user/Johny-Sins/nginx/jsins.oshaani.com.http-only.conf /etc/nginx/conf.d/jsins.oshaani.com.conf
+  sudo cp /home/ec2-user/Johny-Sins/nginx/g.oshaani.com.http-only.conf /etc/nginx/conf.d/g.oshaani.com.conf
   sudo nginx -t && sudo systemctl reload nginx
-  sudo certbot --nginx -d jsins.oshaani.com
+  sudo certbot --nginx -d g.oshaani.com
   # Then optionally copy full HTTPS config from repo and reload nginx again.
   ```
 
@@ -194,8 +196,8 @@ sudo nginx -t && sudo systemctl reload nginx
 
 - **Cause:** `GOOGLE_REDIRECT_URI` or `APP_BASE_URL` not set for production.
 - **Fix:** In `auth/.env` set:
-  - `GOOGLE_REDIRECT_URI=https://jsins.oshaani.com/auth/google/callback`
-  - `APP_BASE_URL=https://jsins.oshaani.com`
+  - `GOOGLE_REDIRECT_URI=https://g.oshaani.com/auth/google/callback`
+  - `APP_BASE_URL=https://g.oshaani.com`
   Add the same redirect URI in Google Cloud Console → Credentials → OAuth client. Restart: `sudo systemctl restart johny-sins`.
 
 ### 5.6 High CPU / memory or app crashes
@@ -232,7 +234,7 @@ sudo nginx -t && sudo systemctl reload nginx
 
 | Task | Command |
 |------|--------|
-| Site health | `curl -s https://jsins.oshaani.com/health` |
+| Site health | `curl -s https://g.oshaani.com/health` |
 | App status | `sudo systemctl status johny-sins` |
 | Nginx status | `sudo systemctl status nginx` |
 | Restart app | `sudo systemctl restart johny-sins` |

@@ -109,3 +109,7 @@ DEFAULT_KEY_WORKFLOW_LIMIT_PER_DAY = int(os.getenv("DEFAULT_KEY_WORKFLOW_LIMIT_P
 
 # Logging (in production default to INFO; DEBUG only when not production)
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO" if PRODUCTION else "DEBUG")
+# Optional: write logs to file (e.g. logs/johny-sins.log or /var/log/johny-sins/app.log)
+LOG_FILE = os.getenv("LOG_FILE", "").strip()
+LOG_FILE_MAX_BYTES = int(os.getenv("LOG_FILE_MAX_BYTES", "10485760"))  # 10 MB
+LOG_FILE_BACKUP_COUNT = int(os.getenv("LOG_FILE_BACKUP_COUNT", "3"))

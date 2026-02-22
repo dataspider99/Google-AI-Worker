@@ -155,8 +155,8 @@ def _run_automation_for_all_users():
 
             creds_obj = dict_to_credentials(cred_data)
             toggles = get_user_workflow_toggles(user_id)
-            include_si = toggles.get("smart_inbox", True)
-            include_car = toggles.get("chat_auto_reply", True) and include_chat
+            include_si = toggles.get("smart_inbox", False)
+            include_car = toggles.get("chat_auto_reply", False) and include_chat
             user_key = get_user_oshaani_key(user_id)
             logger.debug("User %s: toggles smart_inbox=%s chat_auto_reply=%s (include_chat=%s), oshaani_key_set=%s",
                          user_id, include_si, include_car, include_chat, bool(user_key))
@@ -255,7 +255,7 @@ def app_ui(request: Request):
     automation_checked_attr = "checked" if user_automation_enabled else ""
     # Header "Chat auto-reply" badge reflects user's workflow toggle (and server allows it)
     toggles = get_user_workflow_toggles(user_id) if user_id else {}
-    chat_auto_reply_on = AUTOMATION_CHAT_AUTO_REPLY_ENABLED and toggles.get("chat_auto_reply", True)
+    chat_auto_reply_on = AUTOMATION_CHAT_AUTO_REPLY_ENABLED and toggles.get("chat_auto_reply", False)
     return templates.TemplateResponse(
         request,
         "index.html",
@@ -557,6 +557,12 @@ def set_automation_status(
         raise HTTPException(status_code=503, detail=str(e))
 
 
+@app.get("/workflows/smart-inbox")
+def workflow_smart_inbox_get():
+    """Redirect to dashboard so the workflow URL can be opened in the browser."""
+    return RedirectResponse(url=f"{APP_ORIGIN}/app", status_code=302)
+
+
 @app.post("/workflows/smart-inbox")
 def workflow_smart_inbox(
     user_id: Annotated[str, Depends(get_current_user)],
@@ -573,19 +579,28 @@ def workflow_smart_inbox(
     """
     _check_default_key_limit(user_id)
     logger.info("Smart inbox workflow for %s", user_id)
-    creds = _get_user_creds(user_id)
-    orchestrator = _get_orchestrator_for_user(user_id)
-    user_request = request or "Summarize my inbox and highlight urgent items. Suggest draft replies for the top 3 emails."
-    result = orchestrator.run_smart_inbox(
-        creds,
-        user_request=user_request,
-        create_tasks=create_tasks,
-        create_events=create_events,
-        user_id=user_id,
-    )
-    if not get_user_oshaani_key(user_id):
-        increment_default_key_usage_today(user_id)
-    return result
+    try:
+        creds = _get_user_creds(user_id)
+        orchestrator = _get_orchestrator_for_user(user_id)
+        user_request = request or "Summarize my inbox and highlight urgent items. Suggest draft replies for the top 3 emails."
+        result = orchestrator.run_smart_inbox(
+            creds,
+            user_request=user_request,
+            create_tasks=create_tasks,
+            create_events=create_events,
+            user_id=user_id,
+        )
+        if not get_user_oshaani_key(user_id):
+            increment_default_key_usage_today(user_id)
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Smart inbox workflow failed for %s: %s", user_id, e)
+        raise HTTPException(
+            status_code=503,
+            detail=f"Smart inbox failed: {e}" if not PRODUCTION else "Smart inbox failed. Check server logs.",
+        )
 
 
 @app.post("/workflows/chat-assistant")
@@ -766,8 +781,8 @@ def run_all_workflows_now(user_id: Annotated[str, Depends(get_current_user)]):
     result = run_all_workflows_for_user(
         user_id,
         creds,
-        include_smart_inbox=toggles.get("smart_inbox", True),
-        include_chat_auto_reply=toggles.get("chat_auto_reply", True),
+        include_smart_inbox=toggles.get("smart_inbox", False),
+        include_chat_auto_reply=toggles.get("chat_auto_reply", False),
         oshaani_api_key=get_user_oshaani_key(user_id),
     )
     if not get_user_oshaani_key(user_id):
@@ -779,7 +794,7 @@ def run_all_workflows_now(user_id: Annotated[str, Depends(get_current_user)]):
 
 @app.get("/tasks/lists")
 def list_task_lists(user_id: Annotated[str, Depends(get_current_user)]):
-    """List Google Task lists. Tasks are stored in 'Johny Sins' by default."""
+    """List task lists from Google Tasks API (tasklists().list()). Used by Show button to display all lists."""
     from services.tasks_service import list_task_lists as _list_task_lists
 
     creds = _get_user_creds(user_id)
@@ -792,12 +807,18 @@ def list_tasks(
     user_id: Annotated[str, Depends(get_current_user)],
     task_list_id: str,
     show_completed: bool = Query(False, description="Include completed tasks"),
+    max_results: Optional[int] = Query(None, description="Max tasks to return; 0 or omit for all (paginated)"),
 ):
-    """List tasks in a task list."""
+    """List tasks in a task list from Google Tasks API (tasks().list()). Used by Show button to display tasks."""
     from services.tasks_service import list_tasks as _list_tasks
 
     creds = _get_user_creds(user_id)
-    tasks = _list_tasks(creds, task_list_id, show_completed=show_completed)
+    tasks = _list_tasks(
+        creds,
+        task_list_id,
+        show_completed=show_completed,
+        max_results=max_results if max_results is not None else 0,
+    )
     return {"tasks": tasks}
 
 

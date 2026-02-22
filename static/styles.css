@@ -586,6 +586,7 @@ body {
 .dashboard-card:nth-child(4) { animation-delay: 0.5s; }
 .dashboard-card:nth-child(5) { animation-delay: 0.56s; }
 .dashboard-card:nth-child(6) { animation-delay: 0.62s; }
+.dashboard-card:nth-child(7) { animation-delay: 0.68s; }
 
 .dashboard-info {
   margin-top: 2rem;

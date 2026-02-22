@@ -91,7 +91,7 @@ def test_default_workflow_toggles():
         "chat_spaces",
     }
     for v in DEFAULT_WORKFLOW_TOGGLES.values():
-        assert v is True
+        assert v is False
 
 
 def test_get_user_workflow_toggles_no_creds():

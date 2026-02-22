@@ -75,6 +75,86 @@ def _find_user_data_file(service, folder_id: str) -> Optional[str]:
     return files[0]["id"] if files else None
 
 
+def _find_file_in_folder(service, folder_id: str, name: str) -> Optional[str]:
+    """Find a file by name in folder. Returns file_id or None."""
+    result = (
+        service.files()
+        .list(
+            q=f"'{folder_id}' in parents and name='{name}' and trashed=false",
+            fields="files(id, name)",
+        )
+        .execute()
+    )
+    files = result.get("files", [])
+    return files[0]["id"] if files else None
+
+
+WORKFLOW_RESULT_FILENAMES = {
+    "smart-inbox": "Smart Inbox result.txt",
+    "document-intelligence": "Document Intelligence result.txt",
+    "first-email-draft": "First email draft result.txt",
+}
+
+
+def save_workflow_result_to_drive(
+    creds: Credentials,
+    workflow_name: str,
+    content: str,
+) -> Optional[str]:
+    """
+    Save workflow result as a text file in the user's "Johny Sins" Drive folder.
+    Returns webViewLink to open the file in Drive, or None on failure.
+    """
+    service = get_drive_service(creds)
+    folder_id = _get_or_create_app_folder(creds)
+    if not folder_id:
+        return None
+
+    filename = WORKFLOW_RESULT_FILENAMES.get(workflow_name) or f"{workflow_name} result.txt"
+    try:
+        from googleapiclient.http import MediaIoBaseUpload
+
+        body_content = content.encode("utf-8")
+        media_body = MediaIoBaseUpload(
+            BytesIO(body_content),
+            mimetype="text/plain; charset=utf-8",
+            resumable=False,
+        )
+
+        existing_id = _find_file_in_folder(service, folder_id, filename)
+        if existing_id:
+            service.files().update(
+                fileId=existing_id,
+                media_body=media_body,
+            ).execute()
+            file_id = existing_id
+        else:
+            created = service.files().create(
+                body={
+                    "name": filename,
+                    "parents": [folder_id],
+                    "mimeType": "text/plain",
+                },
+                media_body=media_body,
+                fields="id, webViewLink",
+            ).execute()
+            file_id = created.get("id")
+
+        meta = service.files().get(fileId=file_id, fields="webViewLink").execute()
+        return meta.get("webViewLink")
+    except HttpError as e:
+        status = getattr(e.resp, "status", "?") if hasattr(e, "resp") else "?"
+        logger.warning(
+            "Drive workflow result save failed (HTTP %s): %s",
+            status,
+            e,
+        )
+        return None
+    except Exception as e:
+        logger.warning("Failed to save workflow result to Drive: %s", e)
+        return None
+
+
 def save_user_data_to_drive(creds: Credentials, user_id: str, data: dict[str, Any]) -> bool:
     """
     Save user data (credentials, settings, etc.) to user's Drive.

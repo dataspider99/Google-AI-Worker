@@ -71,28 +71,46 @@ def list_tasks(
     creds: Credentials,
     task_list_id: str,
     show_completed: bool = False,
-    max_results: int = 100,
+    max_results: Optional[int] = 100,
 ) -> list[dict[str, Any]]:
-    """List tasks in a task list."""
+    """List tasks in a task list. If max_results is None or 0, fetch all tasks (paginated, cap 500)."""
     service = get_tasks_service(creds)
+    out: list[dict[str, Any]] = []
+    page_token: Optional[str] = None
+    fetch_all = max_results is None or max_results == 0
+    max_per_list = 500  # safety cap when fetching all
     try:
-        response = service.tasks().list(
-            tasklist=task_list_id,
-            showCompleted=show_completed,
-            maxResults=max_results,
-        ).execute()
-        return [
-            {
-                "id": t.get("id", ""),
-                "title": t.get("title", ""),
-                "notes": t.get("notes", ""),
-                "status": t.get("status", "needsAction"),
-                "due": t.get("due", ""),
-                "completed": t.get("completed", ""),
-                "updated": t.get("updated", ""),
+        while True:
+            request_max = 100  # API max per request
+            if not fetch_all and max_results and len(out) >= max_results:
+                break
+            request_params: dict[str, Any] = {
+                "tasklist": task_list_id,
+                "showCompleted": show_completed,
+                "maxResults": request_max,
             }
-            for t in response.get("items", [])
-        ]
+            if page_token:
+                request_params["pageToken"] = page_token
+            response = service.tasks().list(**request_params).execute()
+            items = response.get("items", [])
+            for t in items:
+                out.append({
+                    "id": t.get("id", ""),
+                    "title": t.get("title", ""),
+                    "notes": t.get("notes", ""),
+                    "status": t.get("status", "needsAction"),
+                    "due": t.get("due", ""),
+                    "completed": t.get("completed", ""),
+                    "updated": t.get("updated", ""),
+                })
+            page_token = response.get("nextPageToken")
+            if not page_token:
+                break
+            if not fetch_all and max_results and len(out) >= max_results:
+                break
+            if fetch_all and len(out) >= max_per_list:
+                break
+        return out
     except HttpError as e:
         _log_http_error("Tasks tasks.list", e)
         raise

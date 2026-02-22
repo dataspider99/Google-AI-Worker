@@ -305,18 +305,18 @@ def set_user_oshaani_key(user_id: str, api_key: str) -> None:
             path.unlink(missing_ok=True)
 
 
-# Default workflow toggles (all on). Keys: smart_inbox, document_intelligence, chat_auto_reply, first_email_draft, chat_spaces.
+# Default workflow toggles (all off for new users). Keys: smart_inbox, document_intelligence, chat_auto_reply, first_email_draft, chat_spaces.
 DEFAULT_WORKFLOW_TOGGLES = {
-    "smart_inbox": True,
-    "document_intelligence": True,
-    "chat_auto_reply": True,
-    "first_email_draft": True,
-    "chat_spaces": True,
+    "smart_inbox": False,
+    "document_intelligence": False,
+    "chat_auto_reply": False,
+    "first_email_draft": False,
+    "chat_spaces": False,
 }
 
 
 def get_user_workflow_toggles(user_id: str) -> dict[str, bool]:
-    """Return user's workflow on/off toggles from Drive. Missing keys = True (on)."""
+    """Return user's workflow on/off toggles from Drive. Missing keys = False (off)."""
     cred_data = load_credentials(user_id)
     if not cred_data:
         return dict(DEFAULT_WORKFLOW_TOGGLES)

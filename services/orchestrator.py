@@ -83,7 +83,7 @@ class WorkflowOrchestrator:
         )
         full_request = user_request + task_instruction + event_instruction
 
-        emails = fetch_emails(creds, max_results=max_emails)
+        emails = fetch_emails(creds, max_results=max_emails, q="newer_than:2d")
         drive = fetch_drive_files(creds, max_results=5)
         chat = []
         for space in fetch_chat_spaces(creds)[:2]:
@@ -101,6 +101,28 @@ class WorkflowOrchestrator:
             events_created = self._create_events_from_response(creds, result.get("response", ""))
             if events_created:
                 result["events_created"] = events_created
+
+        response_text = result.get("response", "")
+        lines = [response_text.strip()]
+        if result.get("tasks_created"):
+            lines.append("")
+            lines.append("--- Google Tasks created ---")
+            for t in result["tasks_created"]:
+                lines.append(f"- {t.get('title', '')}" + (f" | {t.get('notes', '')}" if t.get("notes") else ""))
+        if result.get("events_created"):
+            lines.append("")
+            lines.append("--- Calendar events created ---")
+            for ev in result["events_created"]:
+                summary = ev.get("summary", "")
+                link = ev.get("htmlLink", "")
+                lines.append(f"- {summary}" + (f" | {link}" if link else ""))
+        content = "\n".join(lines)
+        if content:
+            from services.drive_storage import save_workflow_result_to_drive
+
+            link = save_workflow_result_to_drive(creds, "smart-inbox", content)
+            if link:
+                result["drive_result_link"] = link
 
         return result
 

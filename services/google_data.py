@@ -51,14 +51,33 @@ def _decode_body(payload: dict) -> str:
     return ""
 
 
-def fetch_emails(creds: Credentials, max_results: int = 10) -> list[dict[str, Any]]:
-    """Fetch recent emails from Gmail inbox."""
+def fetch_emails(
+    creds: Credentials,
+    max_results: int = 10,
+    q: Optional[str] = None,
+) -> list[dict[str, Any]]:
+    """Fetch recent emails from Gmail inbox. Use q for Gmail search (e.g. newer_than:2d for last 48 hours)."""
+    service = get_gmail_service(creds)
+    params: dict[str, Any] = {"userId": "me", "maxResults": max_results}
+    if q:
+        params["q"] = q
     try:
-        service = get_gmail_service(creds)
-        results = service.users().messages().list(userId="me", maxResults=max_results).execute()
+        results = service.users().messages().list(**params).execute()
     except HttpError as e:
-        _log_http_error("Gmail messages.list", e)
-        raise
+        err_str = str(e)
+        # Metadata scope does not support 'q' - retry without filter (user may have gmail.metadata only)
+        if (
+            e.resp.status == 403
+            and "Metadata scope" in err_str
+            and "q" in err_str
+            and "parameter" in err_str
+        ):
+            _log_http_error("Gmail messages.list (with q)", e)
+            params.pop("q", None)
+            results = service.users().messages().list(**params).execute()
+        else:
+            _log_http_error("Gmail messages.list", e)
+            raise
     messages = results.get("messages", [])
     emails = []
 
